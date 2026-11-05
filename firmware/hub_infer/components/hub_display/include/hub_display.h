@@ -13,10 +13,13 @@
  *
  * The screen has three faces.  A short animated splash runs first — the
  * waveform, the name, the boot steps — and then the dashboard: the
- * hub's own state at the top, and a card for every cot.  The BOOT
- * button opens and closes a third: the colour check, a grid of the
- * palette's swatches, which is how the panel's own colours are judged
- * (a photograph of a glowing screen in a dark room is not a colour
+ * hub's own state at the top, and a card for every cot.
+ *
+ * The BOOT button (GPIO 0, active low) cycles the panel through the
+ * other two faces: the help page, which explains what each number on a
+ * cot card means, and the colour check, a grid of the palette's
+ * swatches, which is how the panel's own colours are judged (a
+ * photograph of a glowing screen in a dark room is not a colour
  * measurement).
  */
 
@@ -60,7 +63,9 @@ typedef struct {
     uint8_t id;            /* 1..3 */
     bool    online;        /* the hub has heard from it */
     bool    crying;        /* the hub is announcing a cry from it */
-    float   level;         /* its last RMS */
+    float   rms;           /* how loud the room is at it, right now */
+    float   trigger;       /* the level it sends audio over — the notch
+                            * on the level bar.  Zero = not known */
     uint8_t confidence;    /* the last confirmed confidence, in percent */
     int8_t  rssi;          /* telemetry RSSI in dBm; 0 = unknown */
     uint16_t battery_mv;   /* its battery cell voltage; 0 = no reading */
@@ -76,7 +81,8 @@ typedef struct {
     bool     crying;        /* the hub is announcing a cry */
     uint8_t  cot_id;        /* which cot — the loudest one */
     uint8_t  confidence;    /* the last confirmed confidence, in percent */
-    float    level;         /* that cot's last RMS */
+    float    rms;           /* that cot's last RMS */
+    float    trigger;       /* that cot's trigger level */
     uint8_t  node_count;    /* how many cots the hub knows about */
     bool     ble_ready;     /* the Bluetooth server is advertising */
     uint8_t  ble_clients;   /* caregiver devices connected and subscribed */

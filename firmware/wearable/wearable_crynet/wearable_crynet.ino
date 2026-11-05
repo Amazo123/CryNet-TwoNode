@@ -9,6 +9,15 @@
  * connect, so a wearable that attaches in the middle of a cry still
  * sees it.
  *
+ * The screen is set in the hub panel's house style (firmware/hub_infer/
+ * components/hub_display), translated to one bit: a boot face with the
+ * breathing wordmark and a filling progress bar, a title card carrying
+ * the builder's name and id number with the project title running
+ * through as a ticker, then the dashboard with the waveform along its
+ * bottom edge.  An alert inverts a band across the top -- the closest a
+ * monochrome panel comes to the hub's red -- and blinks it while the
+ * wrist buzzes.
+ *
  * The hub's contract, unchanged by this sketch:
  *
  *   device name   INFANT_MONITOR_HUB
@@ -108,59 +117,293 @@ static void haptic_tick(void)
     digitalWrite(PIN_LED, LED_ACTIVE_LOW ? !level : level);
 }
 
-/* ------------------------------------------------------------- render -- */
+/* ------------------------------------------------------------- theme -- */
 
+/* The hub's panel sets the house style, and this little screen borrows
+ * it in one bit: the waveform that runs along the bottom edge, the
+ * wordmark, the accent band across the top of the title card, and the
+ * boot progress bar that fills as the device comes up.
+ *
+ * Colour is the one thing a monochrome panel cannot copy, so the accent
+ * is drawn inverted, and an alert turns the whole screen upside down
+ * for as long as the wrist is buzzing -- the loudest thing one bit can
+ * say. */
+
+#define WEAR_BOOT_MS   2400    /* the boot face, before the title card  */
+#define WEAR_TITLE_MS  6400    /* how long the title card holds         */
+#define ALERT_HOLD_MS  60000   /* how long an alert stays on the screen */
+
+static uint32_t g_boot_ms      = 0;    /* millis() when the OLED came up */
+static uint32_t g_last_draw_ms = 0;    /* the last frame put on the glass */
+
+/* The classic font is six pixels wide per cell, at any text size, so
+ * centring is arithmetic, not measurement. */
+static uint8_t centre_x(const char *s, uint8_t size)
+{
+    return (uint8_t)((128 - (int)strlen(s) * 6 * size) / 2);
+}
+
+/* The waveform along the bottom edge -- the same two drifting sine
+ * waves the panel's title card uses, drawn as filled bars.  It is the
+ * one motif that says this screen and the hub's panel are the same
+ * project. */
+static void draw_waveform(uint8_t y_base, int frame)
+{
+    const float t = (float)frame * 0.18f;
+    for (int i = 0; i < 21; i++) {
+        const float p = t + i * 0.42f;
+        const float a = 0.5f + 0.5f * sinf(p * 1.7f);
+        const float b = 0.5f + 0.5f * sinf(p * 0.53f + 1.7f);
+        const int bh = (int)(8.0f * (0.18f + 0.82f * a * b));
+        display.fillRect(i * 6, y_base + 1 - bh, 4, bh, SSD1306_WHITE);
+    }
+}
+
+/* The boot steps, in the panel's voice. */
+static const char *s_boot_steps[] = {
+    "the display is up",
+    "bluetooth is awake",
+    "searching for the hub",
+};
+
+static void draw_boot_face(uint32_t elapsed_ms, int frame)
+{
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+
+    /* The wordmark, and under it the breathing line that stands in for
+     * the panel's colour pulse -- a monochrome wordmark cannot brighten
+     * and dim, but the line under it can swell and shrink. */
+    display.setTextSize(2);
+    display.setCursor(centre_x("CRYNET", 2), 10);
+    display.print("CRYNET");
+    display.setTextSize(1);
+    display.setCursor(centre_x("INFANT CRY MONITOR", 1), 30);
+    display.print("INFANT CRY MONITOR");
+
+    const float pulse = 0.5f + 0.5f * sinf((float)frame * 0.12f);
+    const int line_w = (int)(12.0f + 36.0f * pulse);
+    display.fillRect(64 - line_w / 2, 41, line_w, 1, SSD1306_WHITE);
+
+    /* What the wrist is doing as it comes up. */
+    int step = (int)(elapsed_ms / (WEAR_BOOT_MS / 3));
+    if (step > 2) { step = 2; }
+    display.setCursor(centre_x(s_boot_steps[step], 1), 45);
+    display.print(s_boot_steps[step]);
+
+    /* The progress bar, same as the panel's. */
+    const int bar_w = 80, bar_x = (128 - bar_w) / 2, bar_y = 57;
+    const float prog = (float)elapsed_ms / (float)WEAR_BOOT_MS;
+    const int filled = (int)(bar_w * (prog > 1.0f ? 1.0f : prog));
+    display.drawRect(bar_x - 1, bar_y - 1, bar_w + 2, 6, SSD1306_WHITE);
+    if (filled > 0) {
+        display.fillRect(bar_x, bar_y, filled, 4, SSD1306_WHITE);
+    }
+    display.display();
+}
+
+/* The title card: what the device is, who built it, and the number it
+ * is registered under -- the panel's own card, set for a screen eighty
+ * pixels wide where the panel has three hundred and twenty.
+ *
+ * The full project title is ninety-seven characters and this font is
+ * six pixels a cell, so the title cannot be laid out here the way it is
+ * on the panel.  It runs instead as a ticker across the card, the way a
+ * certificate edge runs a gilt line: the whole title passes through,
+ * one word at a time, for as long as the card holds. */
+static const char TITLE_LINE[] =
+    "DESIGN AND CONSTRUCTION OF A MULTI-NODE INFANT CRY "
+    "DETECTION SYSTEM WITH WEARABLE CAREGIVER ALERT";
+
+static void draw_marquee(const char *s, uint8_t y, uint32_t now)
+{
+    const int32_t total = (int32_t)strlen(s) * 6;
+    const int32_t span  = total + 128;   /* in from the right, out to the left */
+    int x = 128 - (int)((now / 40) % (uint32_t)span);
+    display.setTextSize(1);
+    display.setCursor((int16_t)x, (int16_t)y);
+    display.print(s);
+}
+
+static void draw_title_face(uint32_t now, int frame)
+{
+    (void)frame;
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+
+    /* The accent band across the top, with its thicker leading edge. */
+    display.fillRect(0, 0, 128, 2, SSD1306_WHITE);
+    display.fillRect(0, 0, 34, 3, SSD1306_WHITE);
+
+    display.setTextSize(2);
+    display.setCursor(centre_x("CRYNET", 2), 7);
+    display.print("CRYNET");
+
+    draw_marquee(TITLE_LINE, 27, now);
+
+    /* A rule, then the two things a panel has to say if the person
+     * looking at it is the person who built it. */
+    display.fillRect(28, 37, 72, 1, SSD1306_WHITE);
+
+    display.setTextSize(1);
+    display.setCursor(centre_x("AMAZING AYOMIKUN", 1), 40);
+    display.print("AMAZING AYOMIKUN");
+    display.setCursor(centre_x("ADELOWO", 1), 49);
+    display.print("ADELOWO");
+    display.setCursor(centre_x("22/05/04/0029", 1), 57);
+    display.print("22/05/04/0029");
+
+    display.display();
+}
+
+/* The dashboard, in the panel's language: a wordmark and a status pill
+ * in the header, the news in the middle, and the waveform along the
+ * bottom edge so the screen is visibly alive even when nothing is
+ * happening. */
+static void draw_dashboard(uint32_t now, int frame)
+{
+    const bool cry_now    = g_have_alert && g_type == 1 &&
+                            (now - g_alert_ms) < ALERT_HOLD_MS;
+    const bool deaf_now   = g_have_alert && g_type == 3 &&
+                            (now - g_alert_ms) < ALERT_HOLD_MS;
+    const bool cleared_now = g_have_alert && g_type == 2 &&
+                            (now - g_alert_ms) < ALERT_HOLD_MS;
+
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+
+    /* ------------------------------------------------- the alert face */
+    if (cry_now || deaf_now) {
+        /* The band across the top, inverted -- the monochrome answer to
+         * the panel's red.  It blinks while the wrist is buzzing, then
+         * holds steady: urgency first, information after. */
+        const bool band_on = (now - g_alert_ms) >= HAPTIC_MS ||
+                             ((now / 250) % 2 == 0);
+        if (band_on) {
+            display.fillRect(0, 0, 128, 11, SSD1306_WHITE);
+            display.setTextColor(SSD1306_BLACK);
+        }
+        display.setCursor(2, 2);
+        display.print(cry_now ? "CRY" : "DEAF");
+        char pill[8];
+        snprintf(pill, sizeof pill, "COT %u", (unsigned)g_cot);
+        display.setCursor(126 - (int)strlen(pill) * 6, 2);
+        display.print(pill);
+        display.setTextColor(SSD1306_WHITE);
+
+        /* Who, large -- read from across a room. */
+        display.setTextSize(3);
+        display.setCursor(centre_x(pill, 3), 17);
+        display.print(pill);
+        display.setTextSize(1);
+
+        if (cry_now) {
+            /* The confidence, on a bar: the panel's level bar, scaled
+             * to what the model is sure of rather than to how loud the
+             * room is -- a wrist has no microphone. */
+            const int bar_w = 86, bar_y = 45;
+            display.drawRect(-1, bar_y - 1, bar_w + 2, 8, SSD1306_WHITE);
+            const int filled = (int)(bar_w * (g_conf_pct / 100.0f));
+            if (filled > 0) {
+                display.fillRect(0, bar_y, filled, 6, SSD1306_WHITE);
+            }
+            char pct[6];
+            snprintf(pct, sizeof pct, "%u%%", (unsigned)g_conf_pct);
+            display.setCursor(126 - (int)strlen(pct) * 6, 46);
+            display.print(pct);
+        } else {
+            /* The cot has gone deaf: the hub cannot get its audio, so
+             * nobody is watching that cot at all. */
+            display.setCursor(centre_x("the hub cannot", 1), 44);
+            display.print("the hub cannot");
+            display.setCursor(centre_x("hear that cot", 1), 53);
+            display.print("hear that cot");
+            display.display();
+            return;
+        }
+
+        char line[24];
+        snprintf(line, sizeof line, "event #%u  %us ago",
+                 (unsigned)g_event,
+                 (unsigned)((now - g_alert_ms) / 1000));
+        display.setCursor(0, 57);
+        display.print(line);
+        display.display();
+        return;
+    }
+
+    /* --------------------------------------------------- the header */
+    display.setCursor(0, 0);
+    display.print("CRYNET");
+    /* The pill: solid when the hub is attached, hollow while it scans --
+     * the panel's two-state pill, reduced to outline and fill. */
+    if (g_connected) {
+        display.fillRect(84, 1, 4, 4, SSD1306_WHITE);
+        display.setCursor(92, 0);
+        display.print("LINK");
+    } else {
+        display.drawRect(84, 1, 4, 4, SSD1306_WHITE);
+        display.setCursor(92, 0);
+        display.print("SCAN");
+    }
+
+    /* ------------------------------------------------ the middle news */
+    if (cleared_now) {
+        display.setTextSize(2);
+        display.setCursor(centre_x("cleared", 2), 22);
+        display.print("cleared");
+        display.setTextSize(1);
+    } else if (g_connected) {
+        if (g_mask) {
+            display.setTextSize(2);
+            display.setCursor(0, 20);
+            display.print("crying");
+            display.setTextSize(1);
+            display.setCursor(0, 42);
+            for (uint8_t bit = 0; bit < 8 && bit < (g_cots ? g_cots : 8); ++bit) {
+                if (g_mask & (1u << bit)) {
+                    display.printf("cot%u ", (unsigned)(bit + 1));
+                }
+            }
+        } else {
+            display.setTextSize(2);
+            display.setCursor(centre_x("all clear", 2), 22);
+            display.print("all clear");
+            display.setTextSize(1);
+            display.setCursor(centre_x("every cot is quiet", 1), 42);
+            display.print("every cot is quiet");
+        }
+    } else {
+        display.setCursor(centre_x("searching", 1), 22);
+        display.print("searching");
+        display.setCursor(centre_x("for the hub...", 1), 34);
+        display.print("for the hub...");
+    }
+
+    /* ------------------------------------------------------ the edge */
+    draw_waveform(64, g_mask ? frame * 2 : frame);
+    display.display();
+}
+
+/* The splash and the dashboard, whichever face the clock calls for. */
 static void render(void)
 {
     if (!g_oled_ok) {
         return;
     }
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
+    const uint32_t now = millis();
+    const uint32_t up  = now - g_boot_ms;
 
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.print("CryNet");
-    display.setCursor(78, 0);
-    display.print(g_connected ? "LINK" : "SCAN");
-
-    if (g_have_alert && g_type == 1) {
-        display.setTextSize(2);
-        display.setCursor(0, 16);
-        display.printf("COT %u", (unsigned)g_cot);
-        display.setCursor(0, 36);
-        display.printf("CRY %u%%", (unsigned)g_conf_pct);
-        display.setTextSize(1);
-        display.setCursor(0, 56);
-        display.printf("event #%u  %us ago",
-                       (unsigned)g_event,
-                       (unsigned)((millis() - g_alert_ms) / 1000));
-    } else {
-        display.setTextSize(2);
-        display.setCursor(0, 20);
-        if (g_have_alert && g_type == 2) {
-            display.print("cleared");
-        } else {
-            display.print("all clear");
-        }
-        display.setTextSize(1);
-        display.setCursor(0, 56);
-        if (g_connected) {
-            if (g_mask) {
-                display.print("crying: cot");
-                for (uint8_t bit = 0; bit < 8 && bit < (g_cots ? g_cots : 8); ++bit) {
-                    if (g_mask & (1u << bit)) {
-                        display.printf(" %u", (unsigned)(bit + 1));
-                    }
-                }
-            } else {
-                display.print("no cry anywhere");
-            }
-        } else {
-            display.print("searching for hub...");
-        }
+    if (up < WEAR_BOOT_MS) {
+        draw_boot_face(up, (int)(now / 50));
+        return;
     }
-    display.display();
+    if (up < WEAR_BOOT_MS + WEAR_TITLE_MS) {
+        draw_title_face(now, (int)(now / 50));
+        return;
+    }
+    draw_dashboard(now, (int)(now / 50));
 }
 
 /* ---------------------------------------------------------------- BLE -- */
@@ -216,6 +459,24 @@ static void read_state_once(void)
     g_dirty = true;
     Serial.printf("[ble] state: %u cot(s), mask 0x%02X\n",
                   (unsigned)g_cots, (unsigned)g_mask);
+}
+
+/* The idle face quotes the crying mask, so the mask has to stay honest:
+ * it is re-read every few seconds while the hub is attached, not once
+ * at connect. */
+static const uint32_t STATE_POLL_MS = 5000;
+static uint32_t g_state_poll_ms = 0;
+
+static void poll_state(void)
+{
+    if (!g_connected || !g_state) {
+        return;
+    }
+    if (millis() - g_state_poll_ms < STATE_POLL_MS) {
+        return;
+    }
+    g_state_poll_ms = millis();
+    read_state_once();
 }
 
 class HubClientCallbacks : public BLEClientCallbacks {
@@ -302,12 +563,18 @@ void setup()
     digitalWrite(PIN_LED, LED_ACTIVE_LOW ? HIGH : LOW);
 
     Wire.begin(PIN_SDA, PIN_SCL);
+    /* The waveform and the title ticker redraw ten times a second; at
+     * the default 100 kHz each frame costs most of that budget, so the
+     * bus runs at 400 kHz. */
+    Wire.setClock(400000);
     g_oled_ok = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     if (!g_oled_ok) {
         Serial.println("[oled] SSD1306 not found at 0x3C — check SDA 5 / SCL 6");
     } else {
         Serial.println("[oled] up");
     }
+    g_boot_ms      = millis();   /* the splash starts here */
+    g_last_draw_ms = g_boot_ms;
     g_dirty = true;
 
     BLEDevice::init("CRYNET_WEARABLE");
@@ -335,15 +602,17 @@ void loop()
     }
 
     haptic_tick();
+    poll_state();
 
-    /* Cancel the alert panel a minute after its cry so the screen
-     * returns to the idle face on its own. */
-    if (g_have_alert && g_type == 1 && millis() - g_alert_ms > 60000) {
-        g_dirty = true;
-    }
-
-    if (g_dirty) {
-        g_dirty = false;
+    /* The screen is animated — the waveform moves, the title ticker
+     * crawls, the alert band blinks — so it redraws on a steady beat,
+     * and at once whenever new information arrives.  The render itself
+     * decides which face the clock calls for, so an alert also leaves
+     * the screen on its own when its minute is up. */
+    const uint32_t now = millis();
+    if (g_dirty || now - g_last_draw_ms >= 100) {
+        g_dirty        = false;
+        g_last_draw_ms = now;
         render();
     }
     delay(10);

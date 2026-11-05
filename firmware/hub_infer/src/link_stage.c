@@ -1578,7 +1578,12 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
             ds.crying = link_stage_crying(show->node_id);
             ds.cot_id = show->node_id;
             ds.confidence = show->last_confidence;
-            ds.level = show->rms;
+            ds.rms = show->rms;
+            /* The trigger the cot sends audio over.  The panel draws it
+             * as a notch on the level bar, which is what tells the
+             * caregiver whether a cot is only being listened to or is
+             * shipping its audio to the model. */
+            ds.trigger = show->event_rms;
         }
         /* Every cot the hub has heard from, so the dashboard can show
          * them one by one.  The slot is the cot number, so the cards
@@ -1598,7 +1603,8 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
             const bool live = node_live(&state[i], snap_now);
             ds.nodes[slot].online = live;
             ds.nodes[slot].crying = live && link_stage_crying(state[i].node_id);
-            ds.nodes[slot].level = state[i].rms;
+            ds.nodes[slot].rms = state[i].rms;
+            ds.nodes[slot].trigger = state[i].event_rms;
             ds.nodes[slot].confidence = state[i].last_confidence;
             /* The battery only while the cot is answering: a card that
              * has gone quiet must not go on quoting a level nothing is

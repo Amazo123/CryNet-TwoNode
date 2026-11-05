@@ -6,21 +6,27 @@
  * other core redraws whatever changed.  Only this task ever touches the
  * panel, so the driver needs no locking of its own.
  *
- * The screen has two faces.
+ * The screen has three faces.
  *
- *   * A splash.  It runs first, for four seconds: a waveform that moves,
- *     the name, a progress bar and the boot steps.  The user asked for
- *     this — the dashboard should not simply appear.
+ *   * A splash, in two acts.  First the boot: a waveform that moves,
+ *     the name, the boot steps.  Then the title card: the project's
+ *     own title, the name of the person who built it and the number it
+ *     is registered under.  A final-year project is judged partly on
+ *     what it is and who did it, and a device that says so on its own
+ *     screen answers the examiner before they ask.
  *
- *   * The dashboard.  The hub's own state at the top (cot link, bluetooth,
- *     uptime), a banner that says what the system is doing, and a card
- *     for every cot: its name, whether it is online, and its level.
+ *   * The dashboard.  The hub's own state at the top (cot link,
+ *     bluetooth, uptime), a banner that says what the system is doing,
+ *     and a card for every cot: its name, whether it is online, and its
+ *     level.
  *
- * A third face can be summoned with the BOOT button: the colour check,
- * a grid of the palette's swatches.  It exists because a photograph of
- * a glowing panel in a dark room is not a colour measurement — the
- * camera opens up, the highlights clip and the white balance drifts —
- * so the swatches are how the panel's own colours are judged.
+ *   * Two more faces, summoned with the BOOT button: the help page,
+ *     which explains what each number on a card means, and the colour
+ *     check, a grid of the palette's swatches.  The colour check exists
+ *     because a photograph of a glowing panel in a dark room is not a
+ *     colour measurement — the camera opens up, the highlights clip and
+ *     the white balance drifts — so the swatches are how the panel's
+ *     own colours are judged.
  *
  * The palette is a calm near-black teal with a teal accent.  Red is
  * kept for one thing only — a confirmed cry — because a panel that is
@@ -137,8 +143,26 @@ static const char *TAG = "hub_display";
 #define FOOT_Y       230
 
 /* The splash: how long it runs, how long each fade takes, and how fast
- * it animates. */
-#define SPLASH_MS    4200
+ * it animates.
+ *
+ * The splash runs in two acts.  The first is the boot: the waveform, the
+ * name, the boot steps and a progress bar.  The second is the title
+ * card: the project this device is, the person who built it, and the
+ * number it is registered under.  A final-year project is judged partly
+ * on what it is and who did it, and a device that says so on its own
+ * screen answers the examiner before they ask.
+ *
+ * The timeline, in milliseconds from the start of the splash:
+ *
+ *   0 .. BOOT_MS           the boot face
+ *   BOOT_MS .. +FADE_MS    the boot face fading out
+ *   +FADE_MS .. SPLASH_MS  the title card
+ *   SPLASH_MS .. +FADE_MS  the whole splash fading out
+ *   .. +2*FADE_MS          the dashboard fading in
+ */
+#define SPLASH_MS    5600
+#define BOOT_MS      2400
+#define TITLE_MS     (SPLASH_MS - BOOT_MS - FADE_MS)
 #define FADE_MS      600
 #define SPLASH_TICK  100        /* ms between frames: ten a second */
 
@@ -157,10 +181,11 @@ static hub_display_state_t s_state;   /* guarded by s_lock */
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint32_t s_version;   /* bumped on every update */
 
-/* The backlight's brightness, and whether the colour check is up.  Both
- * are read by the display task and written by the API. */
+/* The backlight's brightness, and which of the panel's three faces is
+ * up.  Both are read by the display task and written by the API. */
 static volatile uint8_t s_brightness = BACKLIGHT_DEFAULT;
-static volatile bool s_colour_check = false;
+/* 0 = the dashboard, 1 = the help page, 2 = the colour check. */
+static volatile int s_face = 0;
 
 /* The region of the panel that has changed and still has to be pushed. */
 static int s_dirty_x0, s_dirty_y0, s_dirty_x1, s_dirty_y1;
@@ -419,7 +444,9 @@ static const char *const s_boot_steps[] = {
     "searching for the cots",
 };
 
-static void draw_splash(int64_t elapsed_ms, int frame)
+/* The boot face: the waveform, the name, and what the hub is doing as it
+ * comes up. */
+static void draw_boot_face(int64_t elapsed_ms, int frame)
 {
     fb_fill(0, 0, FB_W, FB_H, C_BG);
 
@@ -431,12 +458,12 @@ static void draw_splash(int64_t elapsed_ms, int frame)
     fb_text_centre(164, "INFANT CRY MONITOR", C_DIM, 1);
 
     /* The boot steps and a progress bar that fills as they go. */
-    int step = (int)(elapsed_ms / (SPLASH_MS / 5));
+    int step = (int)(elapsed_ms / (BOOT_MS / 5));
     if (step > 4) { step = 4; }
     fb_text_centre(190, s_boot_steps[step], C_ACCENT, 1);
 
     const int bar_x = 90, bar_w = 140, bar_y = 206;
-    const float prog = (float)elapsed_ms / (float)SPLASH_MS;
+    const float prog = (float)elapsed_ms / (float)BOOT_MS;
     int filled = (int)(bar_w * (prog > 1.0f ? 1.0f : prog));
     fb_fill(bar_x, bar_y, bar_w, 6, C_SURFACE_HI);
     if (filled > 0) {
@@ -445,6 +472,81 @@ static void draw_splash(int64_t elapsed_ms, int frame)
     fb_rect(bar_x - 1, bar_y - 1, bar_w + 2, 8, C_BORDER);
 
     fb_text_centre(222, "esp32-s3 hub", C_DIM, 1);
+}
+
+/* The title card.
+ *
+ * This is the project's own face, and it carries three things: what the
+ * device is, who built it, and the number it is registered under.  The
+ * font is upper case only, so the name is set the way it would be set on
+ * a certificate, and the id number is given room to be read.
+ *
+ * The full project title is long — eighty characters — and the panel is
+ * 320 pixels wide, which is fifty-three characters at the small size.
+ * So it is set across three lines, and the last word of the second line
+ * hangs a little short, which is what a title does.
+ */
+static void draw_title_face(int64_t elapsed_ms, int frame)
+{
+    fb_fill(0, 0, FB_W, FB_H, C_BG);
+
+    /* A quiet accent band across the top, so the card has a top edge. */
+    fb_fill(0, 0, FB_W, 3, C_ACCENT_DIM);
+    fb_fill(0, 0, 60, 3, C_ACCENT);
+
+    fb_text_centre(22, "CRYNET", C_ACCENT, 2);
+    fb_text_centre(44, "A MULTI-NODE INFANT CRY DETECTION SYSTEM",
+                   C_DIM, 1);
+
+    /* The title, in three lines, in the dim colour so it reads as the
+     * caption rather than as the headline. */
+    fb_text_centre(74, "DESIGN AND CONSTRUCTION OF A", C_DIM, 1);
+    fb_text_centre(86, "MULTI-NODE INFANT CRY DETECTION", C_DIM, 1);
+    fb_text_centre(98, "SYSTEM WITH WEARABLE CAREGIVER ALERT", C_DIM, 1);
+
+    /* A rule, then the name and the id number.  These are the two
+     * things a panel has to say if the person standing in front of it
+     * is the person who built it. */
+    fb_fill(60, 120, 200, 1, C_BORDER);
+
+    /* The name, breathing gently like the wordmark does on the boot
+     * face — the same hand, so the two faces belong together. */
+    const float pulse = 0.5f + 0.5f * sinf((float)frame * 0.09f);
+    fb_text_centre(136, "AMAZING AYOMIKUN ADELOWO",
+                   blend(C_TEXT, C_ACCENT, 0.10f + 0.20f * pulse), 2);
+
+    fb_text_centre(170, "22/05/04/0029", C_DIM, 1);
+
+    /* The last line: what this device is in the project, so the panel
+     * names its own role as well as its owner. */
+    fb_text_centre(206, "ESP32-S3 HUB  -  TWO COT NODES", C_DIM, 1);
+
+    /* A waveform along the bottom edge, tying the card to the boot
+     * face: the same bars, moving. */
+    const float t = (float)frame * 0.18f;
+    for (int i = 0; i < 48; i++) {
+        const float p = t + i * 0.42f;
+        const float a = 0.5f + 0.5f * sinf(p * 1.7f);
+        const float b = 0.5f + 0.5f * sinf(p * 0.53f + 1.7f);
+        const int bh = (int)(6.0f * (0.18f + 0.82f * a * b));
+        fb_fill(i * 7, FB_H - 1 - bh, 4, bh, C_ACCENT_DIM);
+    }
+}
+
+/* The splash, whichever act of it is running now. */
+static void draw_splash(int64_t elapsed_ms, int frame)
+{
+    if (elapsed_ms < BOOT_MS) {
+        draw_boot_face(elapsed_ms, frame);
+        return;
+    }
+    if (elapsed_ms < BOOT_MS + FADE_MS) {
+        /* The boot face dissolving into the title card. */
+        draw_boot_face(elapsed_ms, frame);
+        fb_fade(C_BG, (float)(elapsed_ms - BOOT_MS) / (float)FADE_MS);
+        return;
+    }
+    draw_title_face(elapsed_ms, frame);
 }
 
 /* ------------------------------------------------------------------ */
@@ -460,30 +562,68 @@ static void draw_pill_col(int x, int y, const char *label, uint16_t col)
     fb_text(x + 10, y, label, col, 1);
 }
 
-static void draw_level_bar(int x, int y, int w, int h, float level, bool crying,
-                           bool known)
+/* The full-scale of the level bar: the RMS that fills it.
+ *
+ * The bar used to be scaled against 1.0, which is the RMS of a signal
+ * that is clipping, and a cry does not clip: the loudest genuine cry
+ * measured on the bench carried an RMS of 0.18, and the quietest one
+ * the system has to catch carried 0.010.  Against a full scale of 1.0
+ * even a cry filled a third of the bar, so the bar never said anything
+ * and the number beside it was the only thing worth reading.
+ *
+ * 0.25 is the full scale now: a scream fills most of the bar, a cry at
+ * one metre fills about two thirds, and a quiet room shows a sliver.
+ * The scale is square-rooted, so the quiet end of the range is not
+ * squashed into nothing -- the interesting part of this bar is the
+ * bottom fifth of the scale, where the trigger sits. */
+#define LEVEL_BAR_FULL 0.25f
+
+/* Where the cot's own trigger sits on the bar: the level it sends
+ * audio over.  This is the number the notch marks, and it is the one
+ * the "level" in the project's vocabulary means: the threshold, not
+ * the loudness.  The loudness is the RMS. */
+static void draw_level_bar(int x, int y, int w, int h, float level,
+                           float trigger, bool crying, bool known)
 {
     /* An empty bar in a full-strength frame reads as "active" - part of
      * why the no-signal cards looked busier than the live ones - so a
      * dead card's track and frame are washed towards the background. */
     fb_fill(x, y, w, h, known ? C_SURFACE_HI : C_SURFACE);
-    /* The bar is sqrt-scaled: a quiet room still shows a sliver, the
-     * 0.030 trigger lands about a third of the way up, and a loud cry
-     * reaches the end.  A linear bar would sit empty until the room
-     * got very loud indeed. */
+
     float v = level;
     if (v < 0.0f) { v = 0.0f; }
-    if (v > 1.0f) { v = 1.0f; }
-    int fill_w = (int)(sqrtf(v) * (float)(w - 2) + 0.5f);
+    if (v > LEVEL_BAR_FULL) { v = LEVEL_BAR_FULL; }
+    const float frac = sqrtf(v / LEVEL_BAR_FULL);
+
+    /* The colour says whether the cot is over its own trigger: a cot
+     * below it is only being listened to, a cot over it is sending
+     * audio to the hub. */
     uint16_t col = C_GREEN;
     if (crying) {
         col = C_ALERT;
-    } else if (level >= 0.030f) {
+    } else if (trigger > 0.0f && level >= trigger) {
         col = C_AMBER;
     }
+
+    const int fill_w = (int)(frac * (float)(w - 2) + 0.5f);
     if (fill_w > 0) {
         fb_fill(x + 1, y + 1, fill_w, h - 2, col);
     }
+
+    /* The notch: where this cot's trigger sits.  It is what turns the
+     * bar from "a number in colour" into a picture of the decision the
+     * cot is about to make -- the bar crosses the notch, the cot sends
+     * its audio, and the hub gets to judge it. */
+    if (known && trigger > 0.0f) {
+        float t = trigger;
+        if (t > LEVEL_BAR_FULL) { t = LEVEL_BAR_FULL; }
+        const int nx = x + 1 + (int)(sqrtf(t / LEVEL_BAR_FULL) *
+                                     (float)(w - 2) + 0.5f);
+        if (nx > x && nx < x + w - 1) {
+            fb_fill(nx, y, 1, h, C_TEXT);
+        }
+    }
+
     fb_rect(x, y, w, h, known ? C_BORDER : blend(C_BORDER, C_BG, 0.45f));
 }
 
@@ -620,10 +760,18 @@ static void draw_dashboard(const hub_display_state_t *st)
         snprintf(right, sizeof right, "COT %u  %u%%", st->cot_id,
                  st->confidence);
     } else if (st->linked) {
-        /* The banner's number is the level of the cot the hub is
-         * listening to.  It is labelled, because a bare number in the
-         * corner of a banner reads as a clock. */
-        snprintf(right, sizeof right, "LEVEL %.3f", (double)st->level);
+        /* The banner's number is the loudness of the room at the cot
+         * the hub is listening to.
+         *
+         * It used to be labelled LEVEL, which was wrong twice over:
+         * the number is an RMS, and "level" already means the trigger
+         * threshold everywhere else in this project — the console
+         * prints "rms" and "level" as two different numbers, and the
+         * word on the panel meant the third thing again.  One word,
+         * one number: the panel says RMS, and the help page says what
+         * an RMS is. */
+        snprintf(right, sizeof right, "COT %u  RMS %.3f", st->cot_id,
+                 (double)st->rms);
     } else {
         snprintf(right, sizeof right, "--");
     }
@@ -704,12 +852,20 @@ static void draw_dashboard(const hub_display_state_t *st)
          * battery, which put three readings on one line and made the
          * card hard to read at a glance in a dark room; the bar and its
          * number are a pair, and the link and the battery are another
-         * pair, and each pair has a row of its own. */
+         * pair, and each pair has a row of its own.
+         *
+         * The bar carries a notch at the cot's own trigger: the level
+         * it sends audio over.  A cot under its notch is only being
+         * listened to; a cot over it is shipping its audio to the hub
+         * for the model to judge.  The number beside the bar is the
+         * RMS itself — how loud the room is, right now — so the reader
+         * can compare the two without guessing. */
         char rms[16];
-        snprintf(rms, sizeof rms, "RMS %.3f", (double)(known ? n->level : 0.0f));
+        snprintf(rms, sizeof rms, "RMS %.3f", (double)(known ? n->rms : 0.0f));
         const int rms_w = fb_text_w(rms, 1);
         draw_level_bar(CARD_X + 14, y + 26, CARD_W - 28 - rms_w - 6, 8,
-                       known ? n->level : 0.0f, n->crying, known);
+                       known ? n->rms : 0.0f, known ? n->trigger : 0.0f,
+                       n->crying, known);
         fb_text(CARD_X + CARD_W - 14 - rms_w, y + 26, rms,
                 known ? C_TEXT : C_DIM, 1);
 
@@ -830,6 +986,63 @@ static void draw_colour_check(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* The help page                                                       */
+/* ------------------------------------------------------------------ */
+
+/* What the numbers on the dashboard mean.
+ *
+ * The question is the obvious one: the panel says RMS 0.023 next to a
+ * bar, and a bar with a notch in it, and LINK -43 dBm, and none of
+ * those words explain themselves.  A caregiver standing in front of
+ * the panel at three in the morning cannot go and look up what an RMS
+ * is, so the panel says it.
+ *
+ * It is reached from the dashboard with the BOOT button, next to the
+ * colour check: the two pages are both for the person looking at the
+ * panel, and neither is the running state.
+ */
+static void draw_help(void)
+{
+    fb_fill(0, 0, FB_W, FB_H, C_BG);
+
+    fb_fill(0, 0, FB_W, HEADER_H, C_HEADER);
+    fb_text(12, 8, "READING THE PANEL", C_TEXT, 2);
+    fb_fill(0, HEADER_H, FB_W, 2, C_ACCENT_DIM);
+
+    /* The body is set in the small font with a line every ten pixels:
+     * twenty lines fit, and the wording is short because a caregiver
+     * reads this once and then remembers it. */
+    static const char *const lines[] = {
+        "RMS 0.023   how loud the room is right now,",
+        "            out of 1.0.  A quiet room is",
+        "            near 0.005, a cry at one metre",
+        "            is about 0.03 to 0.05.",
+        "",
+        "THE NOTCH    the level that cot sends audio",
+        "            over.  Below it the cot only",
+        "            listens; above it the hub gets",
+        "            the audio and the model judges.",
+        "            The bar turns amber there.",
+        "",
+        "LINK -43dBm  how strong the radio link to that",
+        "            cot is.  -60 and better is strong,",
+        "            -90 and worse is barely there.",
+        "            The bars are the same number.",
+        "",
+        "BAT 87%      that cot's battery.",
+        "CONF 98%     how sure the model was.",
+    };
+    const int n = (int)(sizeof lines / sizeof lines[0]);
+    for (int i = 0; i < n; i++) {
+        const uint16_t col = (lines[i][0] == '\0') ? C_BG
+                           : (i < 4 ? C_TEXT : C_DIM);
+        fb_text(12, 42 + i * 10, lines[i], col, 1);
+    }
+
+    fb_text_centre(FB_H - 14, "press BOOT to go back", C_DIM, 1);
+}
+
+/* ------------------------------------------------------------------ */
 /* The task                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -857,13 +1070,16 @@ static void display_task(void *arg)
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(SPLASH_TICK));
 
-        /* The BOOT button opens and closes the colour check.  It is
-         * active low, so the press is the edge from high to low. */
+        /* The BOOT button cycles the panel through its three faces:
+         * the dashboard, the page that explains the numbers on it, and
+         * the colour check.  It is active low, so the press is the edge
+         * from high to low. */
         const int pressed = gpio_get_level(PIN_BUTTON);
         if (button == 1 && pressed == 0) {
-            s_colour_check = !s_colour_check;
+            s_face = (s_face + 1) % 3;
             ESP_LOGI(TAG, "the button was pressed: %s",
-                     s_colour_check ? "the colour check" : "the dashboard");
+                     s_face == 0 ? "the dashboard"
+                       : s_face == 1 ? "the help page" : "the colour check");
         }
         button = pressed;
 
@@ -889,7 +1105,10 @@ static void display_task(void *arg)
             fb_fade(C_BG, 1.0f - (float)(ms - SPLASH_MS - FADE_MS) /
                             (float)FADE_MS);
             flush_dirty();
-        } else if (s_colour_check) {
+        } else if (s_face == 1) {
+            draw_help();
+            flush_dirty();
+        } else if (s_face == 2) {
             draw_colour_check();
             flush_dirty();
         } else if (version != seen ||
