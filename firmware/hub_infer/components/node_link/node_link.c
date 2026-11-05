@@ -489,6 +489,12 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
         return;  /* a request is the other direction; ignore it */
     }
 
+    /* This dedicated hub monitors only cot IDs 1 and 2.  Reject other
+     * IDs before they can occupy a slot or influence alerts. */
+    if (node_id < 1 || node_id > NODE_LINK_MAX_NODES) {
+        return;
+    }
+
     nl->stats.frames_ok++;
 
     /* The node's address is learned from the frames it sends, and added
@@ -759,6 +765,7 @@ bool node_link_poll_telemetry(node_link_t *nl, node_link_telemetry_t *out)
         out->frames_acked = slot->frames_acked;
         out->radio_full = slot->radio_full;
         out->age_ms = now_ms() - slot->last_seen_ms;
+        out->tel_rssi = slot->tel_rssi;
         found = true;
         break;
     }
@@ -795,6 +802,7 @@ bool node_link_last_telemetry(const node_link_t *nl, uint8_t node_id,
         out->frames_acked = slot->frames_acked;
         out->radio_full = slot->radio_full;
         out->age_ms = now_ms() - slot->last_seen_ms;
+        out->tel_rssi = slot->tel_rssi;
         found = true;
         break;
     }
@@ -803,6 +811,27 @@ bool node_link_last_telemetry(const node_link_t *nl, uint8_t node_id,
 }
 
 /* --------------------------------------------------------------- bursts -- */
+
+bool node_link_send_heartbeat(node_link_t *nl)
+{
+    if (nl == NULL || !nl->up) {
+        return false;
+    }
+
+    /* A heartbeat is the twelve-byte request layout with a type of its
+     * own: it asks for nothing, and it exists so that the cot nodes can
+     * see the hub's signal strength from the RSSI of a frame they
+     * receive.  The node's own link bar is built from exactly that. */
+    uint8_t frame[CRYNET_PROTO_REQUEST_BYTES];
+    const size_t len = crynet_proto_build(frame, CRYNET_PROTO_TYPE_HEARTBEAT,
+                                           0xFF, 0u, 0u, 0u, NULL, 0u);
+    if (len == 0) {
+        return false;
+    }
+
+    static const uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    return esp_now_send(bcast, frame, len) == ESP_OK;
+}
 
 bool node_link_request_window(node_link_t *nl, uint8_t node_id, uint16_t burst_seq)
 {

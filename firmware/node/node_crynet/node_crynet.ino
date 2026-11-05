@@ -78,6 +78,16 @@ static const uint8_t PIN_SCK = 4;   /* INMP441 SCK -> I2S BCLK */
 static const uint8_t PIN_WS  = 5;   /* INMP441 WS            */
 static const uint8_t PIN_DIN = 6;   /* INMP441 SD  -> I2S in  */
 
+/* The connection LED (SYSTEM_WIRING.md 5.1): GPIO10 through 1 kΩ to a
+ * blue LED.  It is driven from the hub's heartbeat, not from this
+ * board's own transmit flag: a node that transmits happily into a hub
+ * that is not there has no connection, and saying so is the LED's
+ * whole job.  It is on while a hub frame has been heard within the
+ * timeout, and it blinks slowly when the board is powered but the hub
+ * is not answering. */
+static const uint8_t PIN_LINK_LED = 10;
+static const uint32_t LINK_LED_TIMEOUT_MS = 3000;
+
 /* --------------------------------------------------------------- contract -- */
 
 static const uint32_t SAMPLE_RATE    = 16000;
@@ -123,6 +133,10 @@ static const float FLOOR_RISE = 0.002f;
 
 /* The ESP-NOW channel.  The hub uses the same one. */
 static const uint8_t LINK_CHANNEL = 6;
+
+/* How many cots this hub watches.  The hub ignores every other node
+ * number, so a node must be 1 or 2 to be heard at all. */
+static const uint8_t CRYNET_COT_COUNT = 2;
 
 /* The frame types on the radio.  These mirror crynet_proto.h on the hub;
  * both sides were written from the same table. */
@@ -347,6 +361,14 @@ static uint32_t  g_frames_sent = 0;
 static uint32_t  g_frames_lost = 0;
 static uint32_t  g_requests = 0;
 static uint32_t  g_heartbeats = 0;
+
+/* The hub's signal as the node hears it: the RSSI of the last frame the
+ * hub sent.  Its heartbeat arrives every 100 ms, so this is a live
+ * reading, and it is the node's own view of the link -- the mirror of
+ * the reading the hub takes of the node's telemetry.  Zero means no hub
+ * frame has been heard yet. */
+static int8_t     g_hub_rssi = 0;
+static uint32_t   g_hub_rssi_ms = 0;   /* millis() of the last hub frame */
 static uint32_t  g_freezes = 0;
 
 static bool      g_dump_active = false;  /* suppress text while dumping */
@@ -757,6 +779,14 @@ static void on_send(const esp_now_send_info_t *info, esp_now_send_status_t statu
 static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     if (len < 12 || data[0] != 0xC3 || data[1] != 0x7E) {
         return;
+    }
+    /* Any frame the hub sent is a reading of the hub's signal as the
+     * node hears it.  The hub sends requests and resend requests, and it
+     * answers every cot's telemetry with a heartbeat; whichever it is,
+     * the RSSI is the node's own view of the link. */
+    if (info != NULL && info->rx_ctrl != NULL) {
+        g_hub_rssi = (int8_t)info->rx_ctrl->rssi;
+        g_hub_rssi_ms = millis();
     }
     /* A heartbeat (type 4) is the hub keeping its radio awake.  It asks
      * for nothing, so the node's window is left alone. */
@@ -1194,6 +1224,53 @@ static void send_telemetry(void) {
 
 /* ---------------------------------------------------------------- console -- */
 
+/* How many bars a link reading is worth, on the same scale the hub's
+ * display uses: 2.4 GHz links in a house, strong above -60 dBm and
+ * barely there below -90. */
+static int rssi_bars(int8_t rssi) {
+    if (rssi == 0) { return 0; }
+    if (rssi >= -60) { return 4; }
+    if (rssi >= -70) { return 3; }
+    if (rssi >= -80) { return 2; }
+    if (rssi >= -90) { return 1; }
+    return 0;
+}
+
+/* The connection LED.  On while the hub has been heard from inside the
+ * timeout, blinking slowly when the board is alive but the hub is not
+ * answering, off when the hub has gone quiet for longer than that. */
+static void link_led_tick(void) {
+    const uint32_t now = millis();
+    const bool heard = (g_hub_rssi_ms != 0) &&
+                       ((now - g_hub_rssi_ms) < LINK_LED_TIMEOUT_MS);
+    if (heard) {
+        digitalWrite(PIN_LINK_LED, HIGH);
+    } else {
+        /* A slow blink: powered, waiting. */
+        digitalWrite(PIN_LINK_LED, ((now / 800) % 2) == 0 ? HIGH : LOW);
+    }
+}
+
+/* The node's own view of the link to the hub, as a network bar. */
+static void print_link_bar(void) {
+    const int bars = rssi_bars(g_hub_rssi);
+    Serial.print("link   [");
+    for (int i = 0; i < 4; i++) {
+        Serial.print(i < bars ? '#' : '.');
+    }
+    if (g_hub_rssi != 0) {
+        Serial.printf("] %d dBm", (int)g_hub_rssi);
+    } else {
+        Serial.print("] --");
+    }
+    if (g_hub_rssi != 0) {
+        const uint32_t age = millis() - g_hub_rssi_ms;
+        Serial.printf("  (hub frame %lu ms ago)\n", (unsigned long)age);
+    } else {
+        Serial.println("  (no hub frame heard)");
+    }
+}
+
 static void print_status(void) {
     /* The radio's own address, which the hub needs in its table of node
      * addresses.  WiFi.macAddress() reports a different one on this
@@ -1232,6 +1309,7 @@ static void print_status(void) {
     esp_now_get_version(&ver);
     Serial.printf("ESP-NOW version %u, hub %s\n", (unsigned)ver,
                   g_hub_known ? "known" : "unknown");
+    print_link_bar();
 }
 
 static void print_stats(void) {
@@ -1276,12 +1354,15 @@ static void handle_command(char *line) {
         }
     } else if (strncmp(line, "id ", 3) == 0) {
         int v = atoi(line + 3);
-        if (v >= 1 && v <= 255) {
+        /* This hub watches two cots, so a node's number is one of two.
+         * A third number is a node the hub will not answer to. */
+        if (v >= 1 && v <= CRYNET_COT_COUNT) {
             g_node_id = (uint8_t)v;
             g_prefs.putUChar("node_id", g_node_id);
             Serial.printf("node id %u (saved)\n", g_node_id);
         } else {
-            Serial.println("id must be 1..255");
+            Serial.printf("id must be 1..%u (this hub watches two cots)\n",
+                          (unsigned)CRYNET_COT_COUNT);
         }
     } else if (strcmp(line, "help") == 0) {
         Serial.println("status | stats | freeze | burst | id <n> | help");
@@ -1322,6 +1403,15 @@ void setup() {
         Serial.printf("node id %u (derived from the MAC; change it with \"id <n>\")\n",
                       g_node_id);
     }
+    /* This hub watches two cots and ignores every other node number, so
+     * a node that has been left on a MAC-derived number outside 1..2
+     * would transmit into a hub that never answers it.  Say so plainly
+     * rather than leaving the board looking dead. */
+    if (g_node_id < 1 || g_node_id > CRYNET_COT_COUNT) {
+        Serial.printf("WARNING: this hub watches cots 1 and %u only. "
+                      "Set this board with \"id 1\" or \"id %u\".\n",
+                      (unsigned)CRYNET_COT_COUNT, (unsigned)CRYNET_COT_COUNT);
+    }
 
     if (!i2s_start()) {
         Serial.println("FATAL: I2S init failed");
@@ -1330,7 +1420,11 @@ void setup() {
         }
     }
     Serial.println("I2S ready: 16 kHz, mono, 32-bit slots -> int16");
-
+    /* The connection LED.  It is a GPIO, so it is set up before anything
+     * else can fail, and the board does not sit there dark while it
+     * blinks its "waiting for the hub" pattern. */
+    pinMode(PIN_LINK_LED, OUTPUT);
+    digitalWrite(PIN_LINK_LED, LOW);
     /* The microphone gets a task of its own, so that the main loop never
      * waits for audio and the radio is fed as fast as the radio can
      * carry it.  The task owns the I2S peripheral from here on: nothing
@@ -1360,6 +1454,9 @@ void setup() {
 void loop() {
     const int64_t lt0 = esp_timer_get_time();
     g_loop_iters++;
+    /* The connection LED first, so it answers the hub's heartbeat
+     * promptly. */
+    link_led_tick();
     if (g_hub_peer_pending) {
         g_hub_peer_pending = false;
         esp_now_peer_info_t hub = {};

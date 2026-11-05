@@ -43,7 +43,7 @@ extern "C" {
 #define DISPLAY_COLOUR_BLUE   DISPLAY_RGB(30, 90, 200)
 
 /* How many cots the hub knows about. */
-#define HUB_DISPLAY_MAX_NODES 3
+#define HUB_DISPLAY_MAX_NODES 2
 
 /* The battery band, from the cell voltage with hysteresis.  The bands
  * follow SYSTEM_WIRING.md 7: normal, low (charge soon), critical
@@ -62,6 +62,7 @@ typedef struct {
     bool    crying;        /* the hub is announcing a cry from it */
     float   level;         /* its last RMS */
     uint8_t confidence;    /* the last confirmed confidence, in percent */
+    int8_t  rssi;          /* telemetry RSSI in dBm; 0 = unknown */
     uint16_t battery_mv;   /* its battery cell voltage; 0 = no reading */
     uint8_t battery_band;  /* HUB_BAT_* */
     bool    deaf;          /* the hub cannot get a window from it, so it

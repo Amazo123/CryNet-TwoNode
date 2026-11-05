@@ -35,9 +35,8 @@
 extern "C" {
 #endif
 
-/* How many cot nodes the hub tracks.  The project is specified for three;
- * one more than that is headroom. */
-#define NODE_LINK_MAX_NODES 4
+/* This hub accepts cot IDs 1 and 2 only. */
+#define NODE_LINK_MAX_NODES 2
 
 typedef struct node_link node_link_t;
 
@@ -58,6 +57,7 @@ typedef struct {
     uint32_t frozen_crc;  /* the node's frozen-window CRC-32, 0 if it has none */
     uint16_t battery_mv;  /* the node's battery cell voltage, 0 = no reading */
     uint32_t age_ms;      /* how long ago this telemetry arrived */
+    int8_t   tel_rssi;    /* RSSI of the telemetry frame, in dBm; 0 = unknown */
     /* The node's own radio counters.  These are what say whether a
      * burst was lost in the air or refused by the node's radio: a node
      * that handed every fragment over and saw few of them come back has
@@ -109,6 +109,10 @@ typedef struct {
     uint32_t requests_failed;
     uint32_t resends_sent;   /* requests for the fragments that went missing */
 } node_link_stats_t;
+
+/* Send the hub's regular heartbeat so cot nodes can measure the hub-side
+ * signal strength from the RSSI of the frame they receive. */
+bool node_link_send_heartbeat(node_link_t *nl);
 
 /* Create the link.  Returns NULL only if the memory for the windows
  * cannot be found. */

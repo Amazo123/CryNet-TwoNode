@@ -211,6 +211,7 @@ typedef struct {
     float    floor_rms;    /* the node's noise floor */
     uint16_t battery_mv;   /* its battery cell voltage; 0 = no reading */
     uint8_t  battery_band; /* HUB_BAT_*, moved with hysteresis */
+    int8_t   rssi;         /* telemetry RSSI in dBm, 0 = unknown */
     /* The node's own radio counters, from its telemetry: what it handed
      * to the radio, what the radio refused, what actually left it, and
      * how often the radio had no room.  They are what tell a burst that
@@ -748,6 +749,7 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
 
     int64_t last_stats_us = 0;
     int64_t last_probe_us = 0;
+    int64_t last_heartbeat_us = 0;
 
     for (;;) {
         /* ---------------- telemetry ---------------- */
@@ -799,6 +801,7 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
             st->battery_mv = tel.battery_mv;
             st->battery_band = battery_band_advance(st->battery_band,
                                                     tel.battery_mv);
+            st->rssi = tel.tel_rssi;
 
             /* The node's radio counters.  They are kept so that a
              * stalled burst can say whether the node handed the
@@ -1494,6 +1497,15 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
          * radio. */
         node_link_service_peers(nl);
 
+        /* The heartbeat goes out every second.  It asks the nodes for
+         * nothing; it is there so that each cot can measure the hub-side
+         * signal strength from the RSSI of a frame it receives, which is
+         * what its own link bar is built from. */
+        if ((probe_now - last_heartbeat_us) > 1000000) {
+            last_heartbeat_us = probe_now;
+            node_link_send_heartbeat(nl);
+        }
+
         if (!any_heard && (probe_now - last_probe_us) > 2000000) {
             last_probe_us = probe_now;
             uint8_t frame[CRYNET_PROTO_REQUEST_BYTES];
@@ -1598,6 +1610,7 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
              * is transmitting, and the hub still cannot get its audio,
              * so it cannot announce a cry. */
             ds.nodes[slot].deaf = state[i].deaf;
+            ds.nodes[slot].rssi = state[i].rssi;
             /* Say it when a cot appears or disappears, so the panel's
              * offline cards can be counted rather than squinted at. */
             if (live != s_was_live[i]) {
