@@ -25,6 +25,7 @@
  * on when a newline ends it.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -66,12 +67,21 @@ static void print_status(void)
     }
     for (int i = 0; i < n; i++) {
         const link_stage_cot_t *c = &cots[i];
+        /* The signal strength is reported with the cot's other numbers,
+         * because it is the one reading that says whether the cot is
+         * merely quiet or out of reach.  Zero means no reading yet. */
+        char link[24];
+        if (c->rssi != 0) {
+            snprintf(link, sizeof link, "  link %d dBm", (int)c->rssi);
+        } else {
+            snprintf(link, sizeof link, "  link --");
+        }
         ESP_LOGI(TAG, "  cot %u: rms %.4f  level %.4f  window %.4f%s  "
-                      "confidence %u%%",
+                      "confidence %u%%%s",
                  (unsigned)c->node_id, (double)c->rms, (double)c->level,
                  (double)c->frozen_rms,
                  c->window_full ? " (whole)" : " (filling)",
-                 (unsigned)c->confidence);
+                 (unsigned)c->confidence, link);
     }
 }
 

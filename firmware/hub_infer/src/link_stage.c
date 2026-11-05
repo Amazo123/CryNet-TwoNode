@@ -675,6 +675,7 @@ int link_stage_cots(link_stage_cot_t *out, int max)
         out[n].confidence = state[i].last_confidence;
         out[n].window_full = state[i].window_full;
         out[n].deaf = state[i].deaf;
+        out[n].rssi = state[i].rssi;
         n++;
     }
     return n;

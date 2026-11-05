@@ -202,6 +202,8 @@ typedef struct {
     bool     crying;        /* the hub is announcing a cry from it */
     bool     window_full;   /* it has a whole two-second window to give */
     bool     deaf;          /* its windows never arrive: it cannot announce */
+    int8_t   rssi;          /* the signal strength of its telemetry, in dBm;
+                             * 0 = no reading */
 } link_stage_cot_t;
 
 /* The cots the hub cannot get a window from.  A deaf cot's audio never
