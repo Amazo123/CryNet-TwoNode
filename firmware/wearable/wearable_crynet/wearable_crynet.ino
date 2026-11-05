@@ -12,11 +12,15 @@
  * The screen is set in the hub panel's house style (firmware/hub_infer/
  * components/hub_display), translated to one bit: a boot face with the
  * breathing wordmark and a filling progress bar, a title card carrying
- * the builder's name and id number with the project title running
- * through as a ticker, then the dashboard with the waveform along its
- * bottom edge.  An alert inverts a band across the top -- the closest a
- * monochrome panel comes to the hub's red -- and blinks it while the
- * wrist buzzes.
+ * the device name, the builder's name and the id number, then the
+ * dashboard with the waveform along its bottom edge.  An alert inverts a
+ * band across the top -- the closest a monochrome panel comes to the
+ * hub's red -- and blinks it while the wrist buzzes.
+ *
+ * The wearable does not carry the full project title: it is ninety-seven
+ * characters and this screen is eighty pixels wide, so it would crowd
+ * out the name and the id number that matter more here.  The title
+ * belongs on the hub's panel, which has room for it.
  *
  * The hub's contract, unchanged by this sketch:
  *
@@ -159,36 +163,49 @@ static void draw_waveform(uint8_t y_base, int frame)
     }
 }
 
-/* The boot steps, in the panel's voice. */
+/* The boot steps, in the panel's voice -- and in its capitalisation: a
+ * sentence starts with a capital, the way the panel's own boot lines do
+ * when they are read out. */
 static const char *s_boot_steps[] = {
-    "the display is up",
-    "bluetooth is awake",
-    "searching for the hub",
+    "The display is up",
+    "Bluetooth is awake",
+    "Searching for the hub",
 };
+
+/* The device's name, on two lines because it is sixteen characters and
+ * this screen is a hundred and twenty-eight pixels wide: at the panel's
+ * headline size two, sixteen characters need a hundred and ninety-two
+ * pixels.  Stacked, the two halves sit inside the screen and still read
+ * as one name. */
+#define DEVICE_NAME_TOP "AMAZING'S"
+#define DEVICE_NAME_BOT "CRYNET"
 
 static void draw_boot_face(uint32_t elapsed_ms, int frame)
 {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
 
-    /* The wordmark, and under it the breathing line that stands in for
-     * the panel's colour pulse -- a monochrome wordmark cannot brighten
-     * and dim, but the line under it can swell and shrink. */
+    /* The wordmark -- the device's name, not the project's -- and under
+     * it the breathing line that stands in for the panel's colour pulse:
+     * a monochrome wordmark cannot brighten and dim, but the line under
+     * it can swell and shrink. */
     display.setTextSize(2);
-    display.setCursor(centre_x("CRYNET", 2), 10);
-    display.print("CRYNET");
+    display.setCursor(centre_x(DEVICE_NAME_TOP, 2), 3);
+    display.print(DEVICE_NAME_TOP);
+    display.setCursor(centre_x(DEVICE_NAME_BOT, 2), 19);
+    display.print(DEVICE_NAME_BOT);
     display.setTextSize(1);
-    display.setCursor(centre_x("INFANT CRY MONITOR", 1), 30);
+    display.setCursor(centre_x("INFANT CRY MONITOR", 1), 35);
     display.print("INFANT CRY MONITOR");
 
     const float pulse = 0.5f + 0.5f * sinf((float)frame * 0.12f);
     const int line_w = (int)(12.0f + 36.0f * pulse);
-    display.fillRect(64 - line_w / 2, 41, line_w, 1, SSD1306_WHITE);
+    display.fillRect(64 - line_w / 2, 44, line_w, 1, SSD1306_WHITE);
 
     /* What the wrist is doing as it comes up. */
     int step = (int)(elapsed_ms / (WEAR_BOOT_MS / 3));
     if (step > 2) { step = 2; }
-    display.setCursor(centre_x(s_boot_steps[step], 1), 45);
+    display.setCursor(centre_x(s_boot_steps[step], 1), 48);
     display.print(s_boot_steps[step]);
 
     /* The progress bar, same as the panel's. */
@@ -208,26 +225,12 @@ static void draw_boot_face(uint32_t elapsed_ms, int frame)
  *
  * The full project title is ninety-seven characters and this font is
  * six pixels a cell, so the title cannot be laid out here the way it is
- * on the panel.  It runs instead as a ticker across the card, the way a
- * certificate edge runs a gilt line: the whole title passes through,
- * one word at a time, for as long as the card holds. */
-static const char TITLE_LINE[] =
-    "DESIGN AND CONSTRUCTION OF A MULTI-NODE INFANT CRY "
-    "DETECTION SYSTEM WITH WEARABLE CAREGIVER ALERT";
-
-static void draw_marquee(const char *s, uint8_t y, uint32_t now)
-{
-    const int32_t total = (int32_t)strlen(s) * 6;
-    const int32_t span  = total + 128;   /* in from the right, out to the left */
-    int x = 128 - (int)((now / 40) % (uint32_t)span);
-    display.setTextSize(1);
-    display.setCursor((int16_t)x, (int16_t)y);
-    display.print(s);
-}
-
+ * on the panel -- it would crowd out the name and the id number, which
+ * matter more on a wrist.  The title stays on the hub's panel, which has
+ * the room; this card carries the device's name and its owner's. */
 static void draw_title_face(uint32_t now, int frame)
 {
-    (void)frame;
+    (void)now;
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
 
@@ -235,24 +238,27 @@ static void draw_title_face(uint32_t now, int frame)
     display.fillRect(0, 0, 128, 2, SSD1306_WHITE);
     display.fillRect(0, 0, 34, 3, SSD1306_WHITE);
 
-    display.setTextSize(2);
-    display.setCursor(centre_x("CRYNET", 2), 7);
-    display.print("CRYNET");
-
-    draw_marquee(TITLE_LINE, 27, now);
+    /* The device's name -- sixteen characters, which at the panel's
+     * headline size would need a hundred and ninety-two pixels, so it
+     * sits on one line at the smaller size instead. */
+    display.setTextSize(1);
+    display.setCursor(centre_x(DEVICE_NAME_TOP " " DEVICE_NAME_BOT, 1), 9);
+    display.print(DEVICE_NAME_TOP " " DEVICE_NAME_BOT);
 
     /* A rule, then the two things a panel has to say if the person
      * looking at it is the person who built it. */
-    display.fillRect(28, 37, 72, 1, SSD1306_WHITE);
+    display.fillRect(28, 21, 72, 1, SSD1306_WHITE);
 
-    display.setTextSize(1);
-    display.setCursor(centre_x("AMAZING AYOMIKUN", 1), 40);
+    display.setCursor(centre_x("AMAZING AYOMIKUN", 1), 27);
     display.print("AMAZING AYOMIKUN");
-    display.setCursor(centre_x("ADELOWO", 1), 49);
+    display.setCursor(centre_x("ADELOWO", 1), 37);
     display.print("ADELOWO");
-    display.setCursor(centre_x("22/05/04/0029", 1), 57);
+    display.setCursor(centre_x("22/05/04/0029", 1), 47);
     display.print("22/05/04/0029");
 
+    /* The same waveform the panel runs along its edge, so the card is
+     * alive in the same way the dashboard will be. */
+    draw_waveform(62, frame * 2);
     display.display();
 }
 
@@ -315,8 +321,8 @@ static void draw_dashboard(uint32_t now, int frame)
         } else {
             /* The cot has gone deaf: the hub cannot get its audio, so
              * nobody is watching that cot at all. */
-            display.setCursor(centre_x("the hub cannot", 1), 44);
-            display.print("the hub cannot");
+            display.setCursor(centre_x("The hub cannot", 1), 44);
+            display.print("The hub cannot");
             display.setCursor(centre_x("hear that cot", 1), 53);
             display.print("hear that cot");
             display.display();
@@ -324,7 +330,7 @@ static void draw_dashboard(uint32_t now, int frame)
         }
 
         char line[24];
-        snprintf(line, sizeof line, "event #%u  %us ago",
+        snprintf(line, sizeof line, "Event #%u  %us ago",
                  (unsigned)g_event,
                  (unsigned)((now - g_alert_ms) / 1000));
         display.setCursor(0, 57);
@@ -351,32 +357,32 @@ static void draw_dashboard(uint32_t now, int frame)
     /* ------------------------------------------------ the middle news */
     if (cleared_now) {
         display.setTextSize(2);
-        display.setCursor(centre_x("cleared", 2), 22);
-        display.print("cleared");
+        display.setCursor(centre_x("CLEARED", 2), 22);
+        display.print("CLEARED");
         display.setTextSize(1);
     } else if (g_connected) {
         if (g_mask) {
             display.setTextSize(2);
             display.setCursor(0, 20);
-            display.print("crying");
+            display.print("CRYING");
             display.setTextSize(1);
             display.setCursor(0, 42);
             for (uint8_t bit = 0; bit < 8 && bit < (g_cots ? g_cots : 8); ++bit) {
                 if (g_mask & (1u << bit)) {
-                    display.printf("cot%u ", (unsigned)(bit + 1));
+                    display.printf("COT %u ", (unsigned)(bit + 1));
                 }
             }
         } else {
             display.setTextSize(2);
-            display.setCursor(centre_x("all clear", 2), 22);
-            display.print("all clear");
+            display.setCursor(centre_x("ALL CLEAR", 2), 22);
+            display.print("ALL CLEAR");
             display.setTextSize(1);
-            display.setCursor(centre_x("every cot is quiet", 1), 42);
-            display.print("every cot is quiet");
+            display.setCursor(centre_x("Every cot is quiet", 1), 42);
+            display.print("Every cot is quiet");
         }
     } else {
-        display.setCursor(centre_x("searching", 1), 22);
-        display.print("searching");
+        display.setCursor(centre_x("Searching", 1), 22);
+        display.print("Searching");
         display.setCursor(centre_x("for the hub...", 1), 34);
         display.print("for the hub...");
     }
