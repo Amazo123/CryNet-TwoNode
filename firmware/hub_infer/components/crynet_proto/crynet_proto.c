@@ -59,8 +59,12 @@ size_t crynet_proto_build(uint8_t *out,
                            const uint8_t *payload,
                            uint16_t payload_len)
 {
-    if (type == CRYNET_PROTO_TYPE_REQUEST) {
-        /* The twelve-byte request: no payload, no payload CRC. */
+    if (type == CRYNET_PROTO_TYPE_REQUEST ||
+        type == CRYNET_PROTO_TYPE_HEARTBEAT) {
+        /* The twelve-byte request layout, which the heartbeat shares: no
+         * payload, no payload CRC.  The parser treats the two the same
+         * way and rejects any other length, so a heartbeat built with
+         * the full header would be a malformed frame on the far end. */
         out[0] = CRYNET_PROTO_MAGIC0;
         out[1] = CRYNET_PROTO_MAGIC1;
         out[2] = type;

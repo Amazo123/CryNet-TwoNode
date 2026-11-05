@@ -780,11 +780,16 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
     if (len < 12 || data[0] != 0xC3 || data[1] != 0x7E) {
         return;
     }
-    /* Any frame the hub sent is a reading of the hub's signal as the
-     * node hears it.  The hub sends requests and resend requests, and it
-     * answers every cot's telemetry with a heartbeat; whichever it is,
-     * the RSSI is the node's own view of the link. */
-    if (info != NULL && info->rx_ctrl != NULL) {
+    /* The hub's signal as the node hears it: the RSSI of a frame the hub
+     * sent.  Only the hub's own frame types count — a request, a
+     * heartbeat, a resend request.  The telemetry and the window
+     * fragments are the *other* cot's traffic, which the node also
+     * hears because everything is broadcast, and reading the signal
+     * strength of another cot's frame would report the loudest cot in
+     * the room rather than the hub. */
+    if (info != NULL && info->rx_ctrl != NULL &&
+        (data[2] == LINK_TYPE_REQUEST || data[2] == LINK_TYPE_HEARTBEAT ||
+         data[2] == LINK_TYPE_RESEND)) {
         g_hub_rssi = (int8_t)info->rx_ctrl->rssi;
         g_hub_rssi_ms = millis();
     }
