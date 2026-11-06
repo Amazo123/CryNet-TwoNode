@@ -417,8 +417,8 @@ static void fb_text_centre(int y, const char *text, uint16_t c, uint8_t scale)
 #define WAVE_BARS 36
 #define WAVE_STEP 7
 #define WAVE_X0   ((FB_W - (WAVE_BARS * WAVE_STEP - 3)) / 2)
-#define WAVE_Y    84
-#define WAVE_MAX  26
+#define WAVE_Y    46
+#define WAVE_MAX  12
 
 /* A scrolling waveform: the shape of sound arriving at the mic. */
 static void draw_waveform(int frame)
@@ -452,10 +452,15 @@ static void draw_boot_face(int64_t elapsed_ms, int frame)
 
     draw_waveform(frame);
 
-    /* The name, breathing a little. */
+    /* The device's full name -- stacked, the way the wearable sets it,
+     * because sixteen characters at the headline size four are wider
+     * than the panel.  The wordmark breathes a little. */
     const float pulse = 0.5f + 0.5f * sinf((float)frame * 0.12f);
-    fb_text_centre(126, "CRYNET", blend(C_TEXT, C_ACCENT, 0.25f + 0.35f * pulse), 4);
-    fb_text_centre(164, "INFANT CRY MONITOR", C_DIM, 1);
+    fb_text_centre(68, "AMAZING'S",
+                   blend(C_TEXT, C_ACCENT, 0.25f + 0.35f * pulse), 2);
+    fb_text_centre(88, "CRYNET",
+                   blend(C_TEXT, C_ACCENT, 0.25f + 0.35f * pulse), 4);
+    fb_text_centre(134, "INFANT CRY MONITOR", C_DIM, 1);
 
     /* The boot steps and a progress bar that fills as they go. */
     int step = (int)(elapsed_ms / (BOOT_MS / 5));
@@ -494,7 +499,7 @@ static void draw_title_face(int64_t elapsed_ms, int frame)
     fb_fill(0, 0, FB_W, 3, C_ACCENT_DIM);
     fb_fill(0, 0, 60, 3, C_ACCENT);
 
-    fb_text_centre(22, "CRYNET", C_ACCENT, 2);
+    fb_text_centre(22, "AMAZING'S CRYNET", C_ACCENT, 2);
     fb_text_centre(44, "A MULTI-NODE INFANT CRY DETECTION SYSTEM",
                    C_DIM, 1);
 

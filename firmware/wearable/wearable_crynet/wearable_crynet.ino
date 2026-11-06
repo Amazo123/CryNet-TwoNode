@@ -5,9 +5,16 @@
  * (firmware/hub_infer/components/ble_alert — the same service a phone
  * connects to, verified in the alert sessions).  The wearable scans for
  * the hub, subscribes to the six-byte alert characteristic and shows the
- * alert on the OLED.  It also reads the state characteristic once on
- * connect, so a wearable that attaches in the middle of a cry still
- * sees it.
+ * alert on the OLED.  The eight-byte state characteristic is subscribed
+ * to as well: the hub publishes it whenever it changes and at least once
+ * a second, so a wearable that attaches in the middle of a cry still
+ * sees it, and the idle face's crying mask stays honest for as long as
+ * the link is up.
+ *
+ * All BLE work — scanning, connecting, subscribing — runs on its own
+ * FreeRTOS task, and loop() only renders: the library's scan start,
+ * connect and characteristic reads all block their caller, so leaving
+ * them in loop() froze the whole screen whenever the hub went away.
  *
  * The screen is set in the hub panel's house style (firmware/hub_infer/
  * components/hub_display), translated to one bit: a boot face with the
@@ -31,7 +38,7 @@
  *       1  alert type   1 = a cry, 2 = the cry has stopped
  *       2  confidence, percent, little-endian u16
  *       4  event id, little-endian u16
- *   state (read)  19b10002-...  8 bytes:
+ *   state (read+notify) 19b10002-...  8 bytes:
  *       0  cot count   1  crying mask (bit 0 = cot 1, ...)
  *       2  reserved    3  confidence, percent
  *       4  started_at, seconds, little-endian u32
@@ -43,10 +50,12 @@
  * Wiring — SSD1306 to ESP32-C3 SuperMini (SYSTEM_WIRING.md 5.3):
  *     VCC -> 3V3    GND -> GND    SDA -> GPIO5    SCL -> GPIO6
  *
- * The vibration motor does not exist yet.  haptic_trigger() is the hook
- * the DRV2605L will drive (I2C 0x5A, same bus); until the motor arrives
- * the onboard LED stands in and blinks the alert, so the vibration path
- * can be exercised end to end the day the motor lands.
+ * The vibration motor hangs on a BC547 low-side switch that this
+ * firmware drives: GPIO7 -> 2.2 k base resistor -> base, emitter to
+ * ground, the motor in the collector with its own flyback diode
+ * (page 5 of the wiring diagrams).  The 100 k base-emitter pulldown
+ * keeps the transistor off while the C3 boots with the pin floating, so
+ * GPIO7 is driven low before anything else happens here.
  *
  * Serial console — 115200 baud: alerts, links and errors print here.
  */
@@ -55,13 +64,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <BLEDevice.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 /* ---------------------------------------------------------------- pins -- */
 
 static const uint8_t PIN_SDA = 5;   /* SSD1306 SDA (SYSTEM_WIRING.md 5.3) */
 static const uint8_t PIN_SCL = 6;   /* SSD1306 SCL                        */
-static const uint8_t PIN_LED = 8;   /* onboard LED — the haptic stand-in  */
-static const bool LED_ACTIVE_LOW = true;
+static const uint8_t PIN_MOTOR = 7; /* the BC547 haptic switch — wiring
+                                       diagram page 5: GPIO7 -> 2.2 k ->
+                                       base, motor in the collector     */
 
 /* ------------------------------------------------------------ contract -- */
 
@@ -94,31 +106,42 @@ static volatile uint32_t g_alert_ms   = 0;
 static volatile uint8_t  g_cots = 0;
 static volatile uint8_t  g_mask = 0;
 
-/* The haptic stand-in: blink the onboard LED for a while after a cry. */
-static const uint32_t HAPTIC_MS = 2500;
-static uint32_t g_haptic_until = 0;
+/* The haptic drive.
+ *
+ * GPIO7 high turns the BC547 on and the motor spins; GPIO7 low lets it
+ * stop.  A buzz is a 250 ms pulse, and it runs in step with the band
+ * blinking across the top of the screen — the same rhythm, so the wrist
+ * and the eye agree on what is happening.
+ *
+ * One buzz per cry: the hub re-announces a cry when a louder cot joins
+ * it, and the caregiver must not be buzzed twice for one cry. */
+static const uint32_t HAPTIC_MS       = 2500;  /* how long a buzz runs    */
+static const uint32_t HAPTIC_PULSE_MS = 250;   /* one pulse of the motor */
+static volatile uint32_t g_haptic_until = 0;   /* when the buzz stops    */
+static volatile uint32_t g_haptic_start = 0;   /* when the buzz started  */
 
 static bool g_dirty = true;      /* the screen needs a redraw */
 static bool g_oled_ok = false;
 
 /* ------------------------------------------------------------ haptics -- */
 
-/* The vibration hook.  One day: DRV2605L at I2C 0x5A on SDA 5 / SCL 6,
- * driven in realtime mode for the alert.  Today: the onboard LED blinks,
- * so the path from BLE notify to "something physically reacts" is
- * testable without the motor. */
 static void haptic_trigger(void)
 {
-    g_haptic_until = millis() + HAPTIC_MS;
-    Serial.printf("[haptic] alert %u — motor not present, LED stands in\n",
-                  (unsigned)g_event);
+    g_haptic_start = millis();
+    g_haptic_until = g_haptic_start + HAPTIC_MS;
+    Serial.printf("[haptic] alert %u — motor on GPIO7 for %u ms\n",
+                  (unsigned)g_event, (unsigned)HAPTIC_MS);
 }
 
 static void haptic_tick(void)
 {
-    const bool on = millis() < g_haptic_until;
-    const bool level = on && ((millis() / 120) % 2 == 0);
-    digitalWrite(PIN_LED, LED_ACTIVE_LOW ? !level : level);
+    const uint32_t now = millis();
+    bool on = false;
+    if (now < g_haptic_until) {
+        /* 250 ms on, 250 ms off. */
+        on = (((now - g_haptic_start) / HAPTIC_PULSE_MS) % 2) == 0;
+    }
+    digitalWrite(PIN_MOTOR, on ? HIGH : LOW);
 }
 
 /* ------------------------------------------------------------- theme -- */
@@ -449,40 +472,23 @@ static void alert_notify_cb(BLERemoteCharacteristic * /*chr*/,
     }
 }
 
-static void read_state_once(void)
+/* The state characteristic arrives on its own: the hub publishes it
+ * whenever it changes and at least once a second while a link is up, so
+ * the idle face's crying mask is never more than a second stale and
+ * nothing here ever blocks waiting for a read the hub may never answer. */
+static void state_notify_cb(BLERemoteCharacteristic * /*chr*/,
+                            uint8_t *data, size_t len, bool /*isNotify*/)
 {
-    if (!g_state) {
+    if (len < 8) {
+        Serial.printf("[ble] short state (%u bytes)\n", (unsigned)len);
         return;
     }
-    String v = g_state->readValue();
-    if (v.length() < 8) {
-        Serial.printf("[ble] short state (%u bytes)\n", (unsigned)v.length());
-        return;
-    }
-    g_cots = (uint8_t)v[0];
-    g_mask = (uint8_t)v[1];
-    /* v[3] carries the loudest cry's confidence; started_at is v[4..7]. */
+    g_cots = (uint8_t)data[0];
+    g_mask = (uint8_t)data[1];
+    /* data[3] carries the loudest cry's confidence; started_at is data[4..7]. */
     g_dirty = true;
     Serial.printf("[ble] state: %u cot(s), mask 0x%02X\n",
                   (unsigned)g_cots, (unsigned)g_mask);
-}
-
-/* The idle face quotes the crying mask, so the mask has to stay honest:
- * it is re-read every few seconds while the hub is attached, not once
- * at connect. */
-static const uint32_t STATE_POLL_MS = 5000;
-static uint32_t g_state_poll_ms = 0;
-
-static void poll_state(void)
-{
-    if (!g_connected || !g_state) {
-        return;
-    }
-    if (millis() - g_state_poll_ms < STATE_POLL_MS) {
-        return;
-    }
-    g_state_poll_ms = millis();
-    read_state_once();
 }
 
 class HubClientCallbacks : public BLEClientCallbacks {
@@ -510,38 +516,59 @@ static bool connect_to_hub(void)
         return false;
     }
 
+    /* Fresh service discovery, every connection.  The library keeps the
+     * previous connection's service handles across a disconnect —
+     * m_haveServices survives it — so without this the second connect
+     * hands back handles that point at a peer that no longer exists:
+     * subscriptions go nowhere and the link looks alive but is deaf. */
+    if (g_client->getServices()->empty()) {
+        Serial.println("[ble] service discovery failed");
+        g_client->disconnect();
+        return false;
+    }
+
     BLERemoteService *svc = g_client->getService(BLEUUID(SERVICE_UUID));
     if (!svc) {
         Serial.println("[ble] alert service not found");
+        g_client->disconnect();
         return false;
     }
     g_alert = svc->getCharacteristic(BLEUUID(ALERT_UUID));
     if (!g_alert) {
         Serial.println("[ble] alert characteristic not found");
+        g_alert = nullptr;
+        g_client->disconnect();
         return false;
     }
     if (!g_alert->subscribe(true, alert_notify_cb, false)) {
-        Serial.println("[ble] subscribe failed");
+        Serial.println("[ble] alert subscribe failed");
+        g_alert = nullptr;
+        g_client->disconnect();
         return false;
     }
     g_state = svc->getCharacteristic(BLEUUID(STATE_UUID));
-    read_state_once();
+    if (!g_state || !g_state->subscribe(true, state_notify_cb, false)) {
+        Serial.println("[ble] state subscribe failed");
+        g_state = nullptr;
+        g_client->disconnect();
+        return false;
+    }
+
+    if (!g_client->isConnected()) {
+        /* The hub dropped us while the subscriptions were going up. */
+        Serial.println("[ble] hub dropped during setup");
+        return false;
+    }
 
     g_connected = true;
     g_dirty     = true;
-    Serial.println("[ble] subscribed to alerts");
+    Serial.println("[ble] subscribed to alerts + state");
     return true;
 }
 
 class HubScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice advertisedDevice) override
     {
-        /* SCAN DEBUG — what the scan actually sees.  Removed once the
-         * link is verified. */
-        Serial.printf("[scan] %s name=\"%s\" svc_uuid=%d\n",
-                      advertisedDevice.getAddress().toString().c_str(),
-                      advertisedDevice.getName().c_str(),
-                      advertisedDevice.haveServiceUUID() ? 1 : 0);
         const bool name_ok = advertisedDevice.getName() == HUB_NAME;
         const bool uuid_ok = advertisedDevice.haveServiceUUID() &&
                              advertisedDevice.isAdvertisingService(BLEUUID(SERVICE_UUID));
@@ -559,14 +586,25 @@ class HubScanCallbacks : public BLEAdvertisedDeviceCallbacks {
 
 /* ----------------------------------------------------------------- main -- */
 
+/* Defined below; setup() hands it to the scheduler. */
+static void ble_task(void *arg);
+
 void setup()
 {
     Serial.begin(115200);
+    /* Serial on the C3 is CDC: a write with no reader (a laptop asleep,
+     * a cable in a charger) blocks until the buffer drains, and prints
+     * made from BLE callbacks stall the radio that has to keep the
+     * link alive.  Zero timeout — never wait on the console. */
+    Serial.setTxTimeoutMs(0);
     delay(300);
     Serial.println("\nCryNet wearable — BLE alert client (stage 2d)");
 
-    pinMode(PIN_LED, OUTPUT);
-    digitalWrite(PIN_LED, LED_ACTIVE_LOW ? HIGH : LOW);
+    /* The motor's switch first, and low: the transistor must be off
+     * from the first instruction, not from whenever setup() gets
+     * round to it. */
+    pinMode(PIN_MOTOR, OUTPUT);
+    digitalWrite(PIN_MOTOR, LOW);
 
     Wire.begin(PIN_SDA, PIN_SCL);
     /* The waveform and the title ticker redraw ten times a second; at
@@ -591,24 +629,40 @@ void setup()
     scan->setActiveScan(true);
     scan->setInterval(50);
     scan->setWindow(30);
+
+    /* The BLE worker gets a generous stack: service discovery and the
+     * library's own bookkeeping run on it.  Priority 1 — below nothing
+     * the user sees, above the idle task. */
+    xTaskCreate(ble_task, "ble", 6144, nullptr, 1, nullptr);
+}
+
+/* The BLE task.  Every library call here blocks its caller — the two-
+ * argument scan start waits on a semaphore forever, connect can hold
+ * for up to thirty seconds, and a characteristic read waits for a peer
+ * that may never answer — so it gets its own task and the render loop
+ * never waits on the radio.  Unplugging the hub can stall this task for
+ * a while; the screen, the buzz and the animation keep going. */
+static void ble_task(void * /*arg*/)
+{
+    for (;;) {
+        if (g_do_connect) {
+            g_do_connect = false;
+            if (!connect_to_hub()) {
+                g_connected = false;      /* the scan resumes; the client is reused */
+                g_dirty     = true;
+            }
+        } else if (!g_connected) {
+            BLEScan *scan = BLEDevice::getScan();
+            scan->start(2, false);        /* scan in two-second windows */
+            scan->clearResults();
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
 }
 
 void loop()
 {
-    if (g_do_connect) {
-        g_do_connect = false;
-        if (!connect_to_hub()) {
-            g_connected = false;      /* the scan resumes; the client is reused */
-            g_dirty     = true;
-        }
-    } else if (!g_connected) {
-        BLEScan *scan = BLEDevice::getScan();
-        scan->start(2, false);        /* scan in two-second windows */
-        scan->clearResults();
-    }
-
     haptic_tick();
-    poll_state();
 
     /* The screen is animated — the waveform moves, the title ticker
      * crawls, the alert band blinks — so it redraws on a steady beat,
