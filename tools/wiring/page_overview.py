@@ -11,7 +11,7 @@ def build():
 
     # ------------------------------------------------------- power chain --
     p.box(30, 55, 165, 95, "Li-Po cell", cls="proposed",
-          sub=["3.7 V - 2000 / 3000 / 1000 mAh"])
+          sub=["3.7 V cell", "2000 / 3000 / 1000 mAh"])
     p.box(255, 55, 190, 95, "LX-LCBST-TC-001", cls="proposed",
           sub=["charger + protection + boost", "USB-C = charging input"])
     p.box(505, 55, 150, 95, "SPST switch", cls="proposed",
@@ -34,7 +34,7 @@ def build():
           sub=["ESP32-C3 + INMP441 mic", "battery sense + 2 LEDs"])
     p.box(375, 205, 250, 95, "Main hub  x1", cls="mod",
           sub=["ESP32-S3 + 2.8\" ILI9341", "battery sense + 2 LEDs",
-               "backlight switched by GPIO4"])
+               "backlight on 3V3 - always on"])
     p.box(720, 205, 250, 95, "Caregiver wearable  x1", cls="mod",
           sub=["ESP32-C3 + SSD1306 OLED", "haptic motor + battery sense; no LEDs"])
 

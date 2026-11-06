@@ -36,7 +36,8 @@ svg text.note{font-size:12px}
 <section class="page"><h1>1 / CryNet system - power chain and links</h1><h2>Every unit has its own battery and its own ground. No wire ever joins two units.</h2><svg viewBox="0 0 1000 430" class="diagram">
 <rect x="30.0" y="55.0" width="165.0" height="95.0" rx="10" class="proposed"/>
 <text x="42.0" y="79.0" class="title" text-anchor="start">Li-Po cell</text>
-<text x="42.0" y="99.0" class="small" text-anchor="start">3.7 V - 2000 / 3000 / 1000 mAh</text>
+<text x="42.0" y="99.0" class="small" text-anchor="start">3.7 V cell</text>
+<text x="42.0" y="116.0" class="small" text-anchor="start">2000 / 3000 / 1000 mAh</text>
 <rect x="255.0" y="55.0" width="190.0" height="95.0" rx="10" class="proposed"/>
 <text x="267.0" y="79.0" class="title" text-anchor="start">LX-LCBST-TC-001</text>
 <text x="267.0" y="99.0" class="small" text-anchor="start">charger + protection + boost</text>
@@ -63,7 +64,7 @@ svg text.note{font-size:12px}
 <text x="387.0" y="229.0" class="title" text-anchor="start">Main hub  x1</text>
 <text x="387.0" y="249.0" class="small" text-anchor="start">ESP32-S3 + 2.8&quot; ILI9341</text>
 <text x="387.0" y="266.0" class="small" text-anchor="start">battery sense + 2 LEDs</text>
-<text x="387.0" y="283.0" class="small" text-anchor="start">backlight switched by GPIO4</text>
+<text x="387.0" y="283.0" class="small" text-anchor="start">backlight on 3V3 - always on</text>
 <rect x="720.0" y="205.0" width="250.0" height="95.0" rx="10" class="mod"/>
 <text x="732.0" y="229.0" class="title" text-anchor="start">Caregiver wearable  x1</text>
 <text x="732.0" y="249.0" class="small" text-anchor="start">ESP32-C3 + SSD1306 OLED</text>
@@ -180,7 +181,7 @@ svg text.note{font-size:12px}
 <text x="600.0" y="524.0" class="note" text-anchor="start">30 cm from where the baby&#x27;s head will be - never</text>
 <text x="600.0" y="541.0" class="note" text-anchor="start">loose on the mattress.</text>
 </svg><div class="ok">Verified on the live system: mic wiring (3V3 / GND / L/R&#8594;GND, GPIO4 SCK, GPIO5 WS, GPIO6 SD) and the node firmware. The battery divider <b>is</b> implemented: node_crynet.ino uses PIN_BATTERY 3 (ADC1_CH3), a trust gate that only accepts 800-1500 mV at the pin, and scales the reading by 3.2 - so the 220 k&#937; / 100 k&#937; values above are the right ones. The GPIO10 blue link LED is implemented too (PIN_LINK_LED 10). GPIO1 stays spare.</div><div class="warning">Needs firmware on a branch: the GPIO7 amber SOC LED is a dead wire as it stands - there is no GPIO7 anywhere in node_crynet.ino, so nothing drives that LED yet. On USB power the bench node prints "battery none (USB, or the divider is not wired)" - that is expected, it is the divider trust gate refusing an out-of-range pin reading, not a fault.</div><div class="warning">Test cry: the hub refuses a saturated window ("the window is CLIPPED"), so keep the phone at least 15 cm from the mic when you play a test cry through it.</div><div class="foot">Every &#9169; symbol is the same net: the module's VO- (battery negative through the module's protection FET). Wires join only where a dot is drawn. Pin names, not header positions. Repeat identically for node 2.</div></section>
-<section class="page"><h1>3 / Main hub - complete wiring (x1)</h1><h2>ESP32-S3-DevKitC-1 N16R8 + 2.8" ILI9341 (backlight switched by a 2N7002) + LX-LCBST + switch + battery-sense divider + 2 LEDs</h2><svg viewBox="0 0 1000 575" class="diagram">
+<section class="page"><h1>3 / Main hub - complete wiring (x1)</h1><h2>ESP32-S3-DevKitC-1 N16R8 + 2.8" ILI9341 (backlight on 3V3, always on) + LX-LCBST + switch + battery-sense divider + 2 LEDs</h2><svg viewBox="0 0 1000 490" class="diagram">
 <rect x="25.0" y="55.0" width="175.0" height="245.0" rx="10" class="proposed"/>
 <text x="37.0" y="79.0" class="title" text-anchor="start">LX-LCBST-TC-001</text>
 <text x="37.0" y="99.0" class="small" text-anchor="start">charger + protection + boost</text>
@@ -205,21 +206,19 @@ svg text.note{font-size:12px}
 <text x="577.0" y="260.0" class="pin mono" text-anchor="end">GPIO12</text>
 <text x="577.0" y="295.0" class="pin mono" text-anchor="end">GPIO13</text>
 <text x="577.0" y="330.0" class="pin mono" text-anchor="end">GPIO14</text>
-<text x="415.0" y="347.0" class="pin mono" text-anchor="middle">GPIO1</text>
-<text x="462.0" y="347.0" class="pin mono" text-anchor="middle">GPIO4</text>
+<text x="420.0" y="347.0" class="pin mono" text-anchor="middle">GPIO1</text>
 <text x="510.0" y="347.0" class="pin mono" text-anchor="middle">GPIO17</text>
 <text x="558.0" y="347.0" class="pin mono" text-anchor="middle">GPIO2</text>
-<rect x="690.0" y="55.0" width="180.0" height="270.0" rx="10" class="mod"/>
+<rect x="690.0" y="55.0" width="180.0" height="292.0" rx="10" class="mod"/>
 <text x="702.0" y="79.0" class="title" text-anchor="start">2.8&quot; ILI9341</text>
 <text x="698.0" y="110.0" class="pin mono" text-anchor="start">VCC</text>
+<text x="698.0" y="130.0" class="pin mono" text-anchor="start">LED</text>
 <text x="698.0" y="150.0" class="pin mono" text-anchor="start">GND</text>
 <text x="698.0" y="190.0" class="pin mono" text-anchor="start">CS</text>
 <text x="698.0" y="225.0" class="pin mono" text-anchor="start">SDI</text>
 <text x="698.0" y="260.0" class="pin mono" text-anchor="start">CLK</text>
 <text x="698.0" y="295.0" class="pin mono" text-anchor="start">DC</text>
 <text x="698.0" y="330.0" class="pin mono" text-anchor="start">RST</text>
-<text x="864.0" y="195.0" class="pin mono" text-anchor="end">LED</text>
-<text x="864.0" y="176.0" class="small" text-anchor="end">backlight</text>
 <polyline points="200.0,120.0 245.0,120.0" class="wire red" stroke-width="2.5"/>
 <text x="204.0" y="133.0" class="small" text-anchor="start" style="fill:#c43e39">5.1 V</text>
 <polyline points="320.0,120.0 390.0,120.0" class="wire red" stroke-width="2.5"/>
@@ -256,6 +255,8 @@ svg text.note{font-size:12px}
 <polyline points="345.0,375.0 420.0,375.0 420.0,355.0" class="wire black" stroke-width="2.5"/>
 <polyline points="585.0,105.0 690.0,105.0" class="wire red" stroke-width="2.5"/>
 <text x="600.0" y="96.0" class="small" text-anchor="start" style="fill:#c43e39">3.3 V</text>
+<circle cx="640.0" cy="105.0" r="4" class="dot"/>
+<polyline points="640.0,105.0 640.0,125.0 690.0,125.0" class="wire red" stroke-width="2.5"/>
 <polyline points="585.0,145.0 690.0,145.0" class="wire black" stroke-width="2.5"/>
 <polyline points="585.0,185.0 690.0,185.0" class="wire blue" stroke-width="2.5"/>
 <polyline points="585.0,220.0 690.0,220.0" class="wire green" stroke-width="2.5"/>
@@ -265,26 +266,7 @@ svg text.note{font-size:12px}
 <polyline points="870.0,145.0 895.0,145.0" class="wire black" stroke-width="2.5"/>
 <path d="M895.0 145.0 h8" class="wire black" stroke-width="2.5"/>
 <path d="M903.0 136.0 v18 M908.0 139.0 v12 M913.0 142.0 v6" class="wire black" stroke-width="2.5"/>
-<polyline points="870.0,195.0 880.0,195.0 880.0,215.0 960.0,215.0 960.0,225.0" class="wire red" stroke-width="2.5"/>
-<rect x="920.0" y="225.0" width="72.0" height="70.0" rx="10" class="part"/>
-<text x="956.0" y="258.0" class="small mono" text-anchor="middle">2N7002</text>
-<text x="948.0" y="232.0" class="pin mono" text-anchor="end">S</text>
-<text x="948.0" y="290.0" class="pin mono" text-anchor="end">D</text>
-<text x="905.0" y="250.0" class="pin mono" text-anchor="middle">G</text>
-<polyline points="960.0,295.0 960.0,330.0" class="wire red" stroke-width="2.5"/>
-<text x="966.0" y="334.0" class="small mono" text-anchor="start" style="fill:#c43e39">3V3</text>
-<polyline points="920.0,262.0 900.0,262.0 900.0,478.0 550.0,478.0" class="wire grey" stroke-width="2.5"/>
-<rect x="500.0" y="465.0" width="50.0" height="26.0" rx="4" class="part"/>
-<text x="525.0" y="482.1" class="small" text-anchor="middle">100 Ω</text>
-<polyline points="500.0,478.0 462.0,478.0 462.0,355.0" class="wire grey" stroke-width="2.5"/>
-<circle cx="575.0" cy="478.0" r="4" class="dot"/>
-<polyline points="575.0,478.0 575.0,500.0" class="wire grey" stroke-width="2.5"/>
-<rect x="563.0" y="500.0" width="24.0" height="28.0" rx="3" class="part"/>
-<text x="559.0" y="518.1" class="small mono" text-anchor="end">100 kΩ</text>
-<text x="559.0" y="537.0" class="small" text-anchor="end">gate pull-down</text>
-<polyline points="575.0,528.0 575.0,540.0" class="wire grey" stroke-width="2.5"/>
-<path d="M575.0 540.0 v8" class="wire black" stroke-width="2.5"/>
-<path d="M566.0 548.0 h18 M569.0 553.0 h12 M572.0 558.0 h6" class="wire black" stroke-width="2.5"/>
+<text x="596.0" y="366.0" class="note" text-anchor="start">Backlight: LED pin on 3.3 V - always on, no dimming.</text>
 <polyline points="558.0,355.0 558.0,395.0 650.0,395.0" class="wire blue" stroke-width="2.5"/>
 <rect x="650.0" y="382.0" width="72.0" height="26.0" rx="4" class="part"/>
 <text x="686.0" y="399.1" class="small" text-anchor="middle">1 kΩ</text>
@@ -305,9 +287,7 @@ svg text.note{font-size:12px}
 <path d="M830.0 440.0 h8" class="wire black" stroke-width="2.5"/>
 <path d="M838.0 431.0 v18 M843.0 434.0 v12 M848.0 437.0 v6" class="wire black" stroke-width="2.5"/>
 <text x="856.0" y="444.0" class="small" text-anchor="start">SOC</text>
-<text x="600.0" y="495.0" class="note" text-anchor="start">Backlight is now PWM-dimmable (GPIO4 + LEDC);</text>
-<text x="600.0" y="512.0" class="note" text-anchor="start">a sleep mode only needs the PWM at 0.</text>
-</svg><div class="ok">Verified on the live system: the TFT signal pins (CS 10, MOSI 11, SCK 12, DC 13, RST 14, VCC 3V3, GND) and the GPIO4 backlight, which the firmware already drives with LEDC PWM (hub_display.c: PIN_BL 4, ili9341_backlight_set). Because the backlight now runs through the 2N7002, it is PWM-dimmable, and a future sleep mode only has to set the PWM to 0 to switch the panel off.</div><div class="warning">Plan only - the hub firmware does none of this yet: it has no analogReadMilliVolts at all and drives no LED. So the GPIO1 divider (ADC1_CH0), the GPIO2 blue BLE LED and the GPIO17 amber SOC LED are wiring plans, not working circuits. (BAT_CURVE / battery_band_advance in hub_display.c describe the NODES' reported cell voltage, not the hub's own cell.) The hub's peak current with TFT + radios is unmeasured - confirm the LX-LCBST holds 5.1 V during bursts before trusting it here.</div><div class="foot">GPIO35-37 are the Octal PSRAM bus - never wire them. The TFT signal wiring is the recorded working one for the existing module. The 2N7002 gate pull-down keeps the backlight off during reset. Every &#9169; symbol is the same net: the module's VO-.</div></section>
+</svg><div class="ok">Verified on the live system: the TFT signal pins (CS 10, MOSI 11, SCK 12, DC 13, RST 14, VCC 3V3, GND). The panel's LED (backlight) pin is tied to the same 3.3 V net as the panel's VCC pin, so the backlight is permanently on: the glass cannot be dimmed and the display has no sleep mode. The hub firmware still drives GPIO4 as a backlight output (hub_display.c: PIN_BL 4, ili9341_backlight_set), so GPIO4 is left unconnected and the brightness control on the panel has no effect on the glass.</div><div class="warning">Plan only - the hub firmware does none of this yet: it has no analogReadMilliVolts at all and drives no LED. So the GPIO1 divider (ADC1_CH0), the GPIO2 blue BLE LED and the GPIO17 amber SOC LED are wiring plans, not working circuits. (BAT_CURVE / battery_band_advance in hub_display.c describe the NODES' reported cell voltage, not the hub's own cell.) The hub's peak current with TFT + radios is unmeasured - confirm the LX-LCBST holds 5.1 V during bursts before trusting it here.</div><div class="foot">GPIO35-37 are the Octal PSRAM bus - never wire them. The TFT signal wiring is the recorded working one for the existing module. The backlight is on 3.3 V and GPIO4 is not used. Every &#9169; symbol is the same net: the module's VO-.</div></section>
 <section class="page"><h1>4 / Caregiver wearable - complete wiring (x1)</h1><h2>ESP32-C3 SuperMini + SSD1306 OLED + LX-LCBST + switch + battery-sense divider + BC547 haptic drive (status on OLED)</h2><svg viewBox="0 0 1000 540" class="diagram">
 <rect x="25.0" y="55.0" width="175.0" height="245.0" rx="10" class="proposed"/>
 <text x="37.0" y="79.0" class="title" text-anchor="start">LX-LCBST-TC-001</text>
