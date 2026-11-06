@@ -302,6 +302,28 @@ static void draw_dashboard(uint32_t now, int frame)
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(1);
 
+    /* Show every active detection, even while a single-cot alert is held. */
+    const uint8_t mask = g_mask;
+    if (!deaf_now && g_connected && (mask & (mask - 1))) {
+        display.fillRect(0, 0, 128, 11, SSD1306_WHITE);
+        display.setTextColor(SSD1306_BLACK);
+        display.setCursor(2, 2);
+        display.print("CRY DETECTED");
+        display.setTextColor(SSD1306_WHITE);
+        display.setTextSize(2);
+        display.setCursor(centre_x("MULTIPLE", 2), 19);
+        display.print("MULTIPLE");
+        display.setTextSize(1);
+        display.setCursor(0, 46);
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (mask & (1u << bit)) {
+                display.printf("COT %u ", (unsigned)(bit + 1));
+            }
+        }
+        display.display();
+        return;
+    }
+
     /* ------------------------------------------------- the alert face */
     if (cry_now || deaf_now) {
         /* The band across the top, inverted -- the monochrome answer to
@@ -316,7 +338,16 @@ static void draw_dashboard(uint32_t now, int frame)
         display.setCursor(2, 2);
         display.print(cry_now ? "CRY" : "DEAF");
         char pill[8];
-        snprintf(pill, sizeof pill, "COT %u", (unsigned)g_cot);
+        uint8_t shown_cot = g_cot;
+        if (cry_now && g_connected && mask && !(mask & (mask - 1))) {
+            for (uint8_t bit = 0; bit < 8; ++bit) {
+                if (mask & (1u << bit)) {
+                    shown_cot = bit + 1;
+                    break;
+                }
+            }
+        }
+        snprintf(pill, sizeof pill, "COT %u", (unsigned)shown_cot);
         display.setCursor(126 - (int)strlen(pill) * 6, 2);
         display.print(pill);
         display.setTextColor(SSD1306_WHITE);
@@ -378,7 +409,7 @@ static void draw_dashboard(uint32_t now, int frame)
     }
 
     /* ------------------------------------------------ the middle news */
-    if (cleared_now) {
+    if (cleared_now && !g_mask) {
         display.setTextSize(2);
         display.setCursor(centre_x("CLEARED", 2), 22);
         display.print("CLEARED");
@@ -483,8 +514,17 @@ static void state_notify_cb(BLERemoteCharacteristic * /*chr*/,
         Serial.printf("[ble] short state (%u bytes)\n", (unsigned)len);
         return;
     }
+    const uint8_t old_mask = g_mask;
+    const uint8_t new_mask = (uint8_t)data[1];
     g_cots = (uint8_t)data[0];
-    g_mask = (uint8_t)data[1];
+    g_mask = new_mask;
+    if (old_mask && (new_mask & (uint8_t)~old_mask)) {
+        /* Another cot joined an existing detection.  The first cot uses
+         * the alert notification's existing haptic path. */
+        Serial.printf("[ble] additional cot detected: 0x%02X\n",
+                      (unsigned)(new_mask & (uint8_t)~old_mask));
+        haptic_trigger();
+    }
     /* data[3] carries the loudest cry's confidence; started_at is data[4..7]. */
     g_dirty = true;
     Serial.printf("[ble] state: %u cot(s), mask 0x%02X\n",
