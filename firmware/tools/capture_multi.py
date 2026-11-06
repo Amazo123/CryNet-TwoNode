@@ -91,6 +91,8 @@ class Port:
         stamp = f"{time.time() - t0:8.2f}"
         with self.lock:
             self.lines += 1
+            if self.fh is None:
+                self.fh = self.path.open("w", encoding="utf-8", errors="replace")
             self.fh.write(f"[{stamp}] {line}")
             self.fh.flush()
             if INTERESTING.search(line):
@@ -157,6 +159,12 @@ def reader(p: Port, t0: float, stop: threading.Event) -> None:
 
 def send(p: Port, command: str, t0: float) -> None:
     """Send one console command to a port."""
+    if p.serial is None:
+        # The port never opened -- usually another capture already has
+        # it, or the board is gone.  Say so instead of crashing.
+        print(f"port {p.label} ({p.port}) is not open: {p.error}",
+              file=sys.stderr)
+        return
     try:
         p.serial.write((command + "\n").encode("ascii", "replace"))
         p.serial.flush()
