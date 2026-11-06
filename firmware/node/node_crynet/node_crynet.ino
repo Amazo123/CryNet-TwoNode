@@ -575,7 +575,11 @@ static bool i2s_start(void) {
      * slower DC drift that remains is removed by the mean. */
     static const uint32_t WARMUP_FRAMES = SAMPLE_RATE / 2;   /* 500 ms */
     uint32_t warmed = 0;
+    const uint32_t started = millis();
     while (warmed < WARMUP_FRAMES) {
+        if (millis() - started >= 3000u) {
+            return false;
+        }
         size_t got = g_i2s.readBytes((char *)g_raw, sizeof(g_raw));
         got -= got % 8;                 /* whole stereo frames only */
         warmed += got / 8;
@@ -597,6 +601,9 @@ static uint32_t g_pump_empty = 0;   /* calls that returned no whole frame */
 static uint32_t g_pump_frames = 0;
 static uint32_t g_pump_max_us = 0;
 static volatile bool     g_window_damaged = false;  /* the live window has a hole */
+static volatile uint32_t g_i2s_restarts = 0;
+static uint32_t g_zero_samples = 0;
+static const uint32_t I2S_ZERO_LIMIT = SAMPLE_RATE * 5u; /* five seconds */
 static size_t i2s_pump(void) {
     const int64_t t0 = esp_timer_get_time();
     size_t got = g_i2s.readBytes((char *)g_raw, sizeof(g_raw));
@@ -607,6 +614,7 @@ static size_t i2s_pump(void) {
     }
     g_pump_calls++;
     if (got < sizeof(g_raw)) {
+        g_zero_samples = 0; /* missing frames are not consecutive zeros */
         /* The microphone's buffer ran dry: what is in the window is no
          * longer continuous audio. */
         g_window_damaged = true;
@@ -622,6 +630,13 @@ static size_t i2s_pump(void) {
          * justified, so the top 16 bits are the full-scale int16 value.
          * The right slot is a constant and is dropped. */
         int16_t s = (int16_t)(g_raw[f * 2] >> 16);
+        if (s == 0) {
+            if (g_zero_samples < I2S_ZERO_LIMIT) {
+                g_zero_samples++;
+            }
+        } else if (g_zero_samples < I2S_ZERO_LIMIT) {
+            g_zero_samples = 0;
+        }
         g_window[g_write] = s;
         g_write++;
         if (g_write == WINDOW_SAMPLES) {
@@ -655,6 +670,20 @@ static void capture_task(void *arg)
     (void)arg;
     for (;;) {
         i2s_pump();
+        /* Exact zero samples for five seconds are not a quiet room: the
+         * microphone normally has noise.  Restart I2S from its owning task;
+         * invalidate the live ring, but keep any frozen upload intact. */
+        if (g_zero_samples >= I2S_ZERO_LIMIT) {
+            g_zero_samples = 0;
+            g_window_damaged = true;
+            g_i2s_restarts++;
+            if (!g_i2s.end() || !i2s_start()) {
+                /* A failed driver teardown or warmup cannot be repaired
+                 * safely by reusing its handles.  Reboot instead. */
+                ESP.restart();
+            }
+            g_window_damaged = true;
+        }
         /* The read itself paces this task: it returns when the samples
          * have arrived. */
     }
@@ -1300,6 +1329,7 @@ static void print_status(void) {
                   (unsigned)g_pump_calls, (unsigned)g_pump_empty,
                   (unsigned)g_pump_frames, (unsigned)g_pump_max_us,
                   (unsigned)g_loop_iters, (unsigned)g_loop_max_us);
+    Serial.printf("I2S zero watchdog restarts=%u\n", (unsigned)g_i2s_restarts);
     Serial.printf("window %u/%u samples   frozen=%u seq=%u\n", (unsigned)g_filled,
                   (unsigned)WINDOW_SAMPLES, g_frozen_valid ? 1 : 0,
                   (unsigned)g_burst_seq);
