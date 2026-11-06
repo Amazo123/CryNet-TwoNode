@@ -4,11 +4,16 @@
 > decision that was made, why it was made, every issue that was hit, how it
 > was diagnosed, what was done about it, and what the result was.
 >
-> **Repo:** `C:\Users\HP\.t3\projects\fp-2` (branch `main`)
+> **Repo:** `C:\Users\HP\.t3\projects\fp-two-node` (branch `main`, remote
+> `origin` → `https://github.com/Amazo123/CryNet-TwoNode.git`)
 > **Companion files:** `SYSTEM_UPDATE.md` (the living status log and recovery
 > layer — rewritten after every change) and `PROJECT_HANDOFF.md` (the deep
 > briefing: the frozen contracts and the file map).
-> **Last updated:** 2026-10-31
+> **Sibling repository:** `C:\Users\HP\.t3\projects\fp-2` (branch `main`,
+> remote `crynet` → `https://github.com/Amazo123/CryNet.git`) — the **three-cot**
+> system. The two repositories share their history up to commit `99bb257` and
+> then diverge; the two-node system is the one on the bench.
+> **Last updated:** 2026-11-06
 >
 > **Conventions.** Each decision is written as **D-n** and each issue as
 > **I-n**. A decision that was later changed carries a "revised by" note
@@ -20,13 +25,15 @@
 
 ## 0. The system in one paragraph
 
-Three ESP32-C3 cot nodes (INMP441 microphone, I2S at 16 kHz) → ESP-NOW
+**Two** ESP32-C3 cot nodes (INMP441 microphone, I2S at 16 kHz) → ESP-NOW
 radio → an **ESP32-S3-DevKitC-1 hub** that reassembles each node's two-second
 window, runs a TFLite Micro INT8 binary cry/no-cry classifier on it, and
-shows the result on an ILI9341 TFT and publishes it to the caregiver's phone
-over BLE GATT → a wearable (ESP32-C3 + OLED + DRV2605L haptic) that is still
-to be built. The previous firmware attempt failed after flashing, so the
-project was rebuilt from model training upwards.
+shows the result on an ILI9341 TFT and publishes it over BLE GATT → a wearable
+(ESP32-C3 + SSD1306 OLED + **BC547 haptic motor**) on the caregiver's wrist.
+The classifier, the model and the signal contract are shared with the
+three-cot sibling repository `fp-2`; what differs here is the node count, the
+haptic circuit, and the wearable's role. The previous firmware attempt failed
+after flashing, so the project was rebuilt from model training upwards.
 
 ---
 
@@ -188,6 +195,22 @@ int16 pcm[32000] (2.0 s @ 16 kHz mono)
 | **D-49** | **Every host tool that reads a serial stream resynchronises on its own magic** and never waits for a fixed block; capture records carry a CRC-16 and the collector drops any record that fails it. | A USB CDC port can enumerate *after* the sketch has already printed its banner, and a single dropped byte on the USB link would otherwise shift every later sample and quietly ruin the dataset. Both stream parsers are testable classes, checked against synthetic streams. |
 | **D-50** | **The notebook is generated from `research/build_notebook.py` and never hand-edited.** | The notebook is a build artefact. Editing it directly makes it impossible to regenerate and to diff. It is validated with `nbformat.validate()` after every regeneration. |
 
+### 1.9 The two-cot system (this repository)
+
+The decisions below are the ones where this repository deliberately differs
+from the three-cot sibling repository `fp-2`. Everything above this line
+(the model, the signal contract, the trigger rules, the radio link) is
+shared.
+
+| # | Decision | Why |
+|---|---|---|
+| **D-75** | **The two-cot system lives in its own repository** (`fp-two-node`, remote `https://github.com/Amazo123/CryNet-TwoNode.git`), sharing history with `fp-2` up to commit `99bb257` and then diverging. | The two systems are different products with different firmware, different wiring and different documentation, and the owner works on both. Sharing the history keeps the model and the signal contract traceable in one place without letting the two firmware trees drift into each other again - which is exactly what happened to the wearable sketch before the split (the `fp-2` copy was still blinking an LED while the bench was driving a motor). `fp-2` keeps its own remote (`crynet` → `https://github.com/Amazo123/CryNet.git`) and is untouched by this decision. |
+| **D-76** | **The wearable has no status LEDs; its OLED dashboard carries the state** (LINK or SCAN), and the battery/SOC readout is marked as needing firmware that does not exist yet. | A newer revision of the wiring diagram gave the wearable a blue link LED on GPIO1 and a red SOC LED on GPIO4, which contradicted `fp-2`'s `SYSTEM_WIRING.md` §7 and its own committed PDF (page 4). Neither LED has firmware: wiring them produces two dark LEDs and a caregiver who reads a dark LED as a fault. The OLED is already on the wrist and already says what the LEDs would have said. |
+| **D-77** | **The haptic is a real motor on a BC547 low-side switch** (GPIO7 → 2.2 kΩ → base, 100 kΩ base-emitter pulldown, 10 Ω in the motor's + lead, 1N5819 with the cathode up, collector → motor −, emitter → GND), **not the DRV2605L breakout that the planning documents still describe.** | The bench hardware is the BC547 circuit the owner drew, and the motor is now driven by the firmware itself (`HAPTIC_MS 2500`, `HAPTIC_PULSE_MS 250`) rather than by an LED stand-in. The DRV2605L description survives in `SYSTEM_WIRING.md` §2.3 and contradicts §5.3 in the same file; the firmware and the bench win, and the documents are what need correcting. |
+| **D-78** | **The hub's TFT backlight stays on 3V3 and is permanently on; there is no sleep mode.** | The hub's firmware already treats GPIO4 as the backlight (`PIN_BL 4`, `ili9341_backlight_set` with LEDC PWM), so a 2N7002 on GPIO4 would make the panel dimmable and switchable. The owner chose against it: the panel's LED pin is tied to the panel's own 3.3 V net, the glass cannot be blanked while the board is powered, and the system is always plugged in or charging. The MOSFET was removed from the wiring diagram **before anything was soldered**, so nothing had to be unbuilt. GPIO4 is therefore free. |
+| **D-79** | **The node's I2S zero watchdog is committed but not flashed; it goes onto a node after the soldering is finished.** | The watchdog exists because node 2 was once found reading rms 0.0000 on every mic read - the INMP441 delivering nothing - and the fault cleared on a hard reset with no reflash, so its cause was never established. A fault-injection test proved the code executes and refills a window; it did not prove recovery from the original physical fault, and it detects *exact* zeros only, so a mic that goes quiet-but-not-zero is still not covered. The owner is soldering now, and a node should not be reflashed mid-solder, so the watchdog waits until the hardware is settled and can then be flashed and played-cry tested on the bench. |
+| **D-80** | **The multi-cot wearable behaviour is held on its own branch** (`feature/wearable-multi-cot`), not on `main`. | Two cots crying at the same time has never been tested, so the multi-detection alert face, the haptic when a second cot joins, and the suppressed CLEARED stay parked until that test can be run. The single-cot path is unchanged in behaviour, so the firmware the owner has running today is unaffected by the branch's existence. |
+
 ---
 
 ## 2. The issues, in the order they were found
@@ -316,7 +339,10 @@ ALERT {'cot': 1, 'alert': 'cleared', 'confidence_pct': 100, 'event_id': 2}
 
 | # | Item | Why it is still open |
 |---|---|---|
-| **O-1** | **The wearable (Stage 2d)** does not exist yet. | It is a BLE notification client with an SSD1306 OLED and a DRV2605L haptic driver. The hub's side of the contract (the legacy UUIDs and the six-byte alert packet) is done and verified against a real client, so the wearable can be written directly against it. |
+| **O-1** | ~~**The wearable (Stage 2d)** does not exist yet.~~ **RESOLVED (O-1a):** the wearable exists, is flashed and is on the bench. | It is a BLE notification client with an SSD1306 OLED and a DRV2605L haptic driver. The hub's side of the contract (the legacy UUIDs and the six-byte alert packet) is done and verified against a real client, so the wearable can be written directly against it. |
+| **O-1a** | **The wearable now exists and is on the bench** — OLED on 3V3 / SDA GPIO5 / SCL GPIO6, and a BC547 low-side switch driving a real haptic motor on GPIO7 (D-77). **What remains: the battery/SOC readout needs the GPIO3 divider wiring *plus* firmware that does not exist yet.** | The wearable was flashed and proved end to end on 2026-11-06: three alert cycles in a row came through complete (`ALERT cot 1 type 1 conf 100%` on the wrist, the haptic fired, `clear` came back as `type 2`), and it recovered from a hub reset mid-link (`hub lost — rescanning` → found again → subscribed to alerts *and* state). What it does not yet show is a battery percentage, because neither the divider nor the code for it is on the board. |
+| **O-1b** | **The multi-cot behaviour has never been tested with two cots crying at the same time.** | The wearable change that shows every active detection, buzzes when a second cot joins and suppresses CLEARED while another cot is still crying is held on branch `feature/wearable-multi-cot` (D-80) until that test can be run. The single-cot path is unchanged, so the deployed system is unaffected. |
+| **O-1c** | **The node's I2S watchdog is committed but not flashed** — it goes onto a node once the soldering is finished (D-79). | The owner is soldering the final wiring, and a node should not be reflashed mid-solder. The fault-injection test proved the code executes and refills a window, but not that it recovers the original physical fault, and it detects *exact* zeros only. After it is flashed it needs a played-cry end-to-end run to confirm the node still streams and the hub still hears it. |
 | **O-2** | **The model has never heard a real cry.** | The only cry source available in this room is a *recording played through a phone speaker* — compressed, band-limited and EQ'd by the speaker. It is labelled as such. On that audio the model's AUC is 0.9283 with recall 0.724 and FPR 0.000; the misses are two-second windows landing in the gaps between cries. The negatives (this room, this microphone) are authentic. ~50 self-recorded real clips remain the single biggest accuracy win. |
 | **O-3** | **The screen has been seen three times; one photograph is still worth taking, and it has to be taken with the room lit.** | The first photograph confirmed the layout, the text and the orientation (I-31, I-35); the second confirmed the R/B fix; the third was of the colour-check page, and it confirmed every hue (D-56); the fourth was of the ramp, taken in the dark again, and it could not measure the steps - the red channel even jumps the wrong way between adjacent steps - which confirms I-38. But it did its job as a *chooser*: the user picked the third ramp step off it as the teal the screen should be (D-57). What is still wanted is one photograph **with the room lit**, so the ramp yields the panel's own tone curve instead of a colour choice. |
 | **O-4** | **The tensor arena is still in PSRAM.** | Moving it into internal SRAM is the obvious next optimisation. At 101.8 ms of inference per two-second window it is not urgent for a triggered monitor. |

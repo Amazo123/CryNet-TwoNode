@@ -2,9 +2,18 @@
 
 > **Purpose of this document.** It is a complete, self-contained briefing for a fresh chat that has no memory of this project. Everything needed to continue — hardware, decisions, dataset research, the exact signal contract, validation evidence, file map, how to run, known risks, and the next checkpoint — is below.
 >
-> **Repo:** `C:\Users\HP\.t3\projects\fp-2` (git, branch `master`, only commit is `997cc9b Initial commit`; **checkpoint-1 work is uncommitted**).
+> **Repo:** `C:\Users\HP\.t3\projects\fp-two-node` (git, branch `main`, remote `origin` →
+> `https://github.com/Amazo123/CryNet-TwoNode.git`) — the **two-cot** system.
+> **Sibling repository:** `C:\Users\HP\.t3\projects\fp-2` (remote `crynet` →
+> `https://github.com/Amazo123/CryNet.git`) — the **three-cot** system; the two
+> share history up to commit `99bb257` and then diverge.
 >
-> **Status at handoff:** checkpoint 1 complete and validated. Checkpoint 2 (ESP32-S3 firmware) not started.
+> **Status at handoff:** the two-cot system is on the bench and proven end to end
+> (both cots detected, named and buzzed on the wrist, then cleared). The owner
+> has started soldering the final wiring. The node's I2S watchdog is committed
+> but **not flashed** — it waits until the soldering is finished. The multi-cot
+> wearable behaviour is held on branch `feature/wearable-multi-cot` until two
+> cots can cry at the same time.
 
 ---
 
@@ -16,9 +25,9 @@ A **multi-node infant cry monitor** for multi-crib environments (NICU, maternity
 
 | Subsystem | Board | Role |
 |---|---|---|
-| **Cot nodes ×3** | ESP32-C3 SuperMini + INMP441 MEMS mic | I2S capture at 16 kHz, DC-coupled RMS telemetry over ESP-NOW, on-demand 64 KB audio burst back to the hub |
+| **Cot nodes ×2** | ESP32-C3 SuperMini + INMP441 MEMS mic | I2S capture at 16 kHz, DC-coupled RMS telemetry over ESP-NOW, on-demand 64 KB audio burst back to the hub |
 | **Central hub** | **ESP32-S3-DevKitC-1** (dual-core Xtensa LX7 @ 240 MHz, 512 KB SRAM, **8 MB octal PSRAM**) | ESP-NOW receiver, DSP front end, **TFLite Micro inference**, TFT display (ILI9341 320×240), BLE GATT server |
-| **Wearable** | ESP32-C3 SuperMini + SSD1306 OLED + DRV2605L haptic | Caregiver alert via BLE notification |
+| **Wearable** | ESP32-C3 SuperMini + SSD1306 OLED + BC547 haptic motor | Caregiver alert on the wrist via BLE notification; the OLED carries the state (LINK/SCAN), there are no status LEDs |
 
 **The hub is the target device for everything below.** It has 512 KB internal SRAM and 8 MB PSRAM; the model must fit in flash and the tensor arena in RAM/PSRAM.
 
