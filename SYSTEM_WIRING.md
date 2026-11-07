@@ -2,6 +2,8 @@
 
 **Revision:** 7 November 2026. Read alongside `HARDWARE_COMPONENTS.md`.
 
+> **Note:** `SYSTEM_WIRING.pdf` in this repository is a snapshot exported on **2 November 2026** and is **out of date** — it predates the battery design, the two-cot split and the removal of the battery sense and the status LEDs (D-83). This file and `SYSTEM_WIRING_DIAGRAMS.pdf` are the live documents.
+
 > **Important:** The node + hub signal wiring in section 2 reflects the working prototype. The wearable and battery power are **not implemented or verified**. There are **no status LEDs anywhere in the system** (D-83): the node's connection LED, the node's SOC LED, the hub's BLE-status LED and the hub's SOC LED have all been removed, and the battery sense divider has been removed with them. Their exact part-to-part power wiring and GPIO choices cannot safely be finalised until the actual board and charger modules, cell and motor are selected. Section 3 is a proposed connection architecture, not permission to wire an unspecified lithium charger. This academic prototype is not a certified infant-monitoring device and must not replace supervision. Keep cables, cells, modules and small parts out of reach of the infant.
 
 ## 1. System picture
