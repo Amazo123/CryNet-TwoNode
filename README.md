@@ -17,8 +17,9 @@ Training pipeline for the cry detector that runs on the **Central Intelligence H
 | `firmware/prebuilt/` | **The built flash images** — the hub, the cot node and the wearable, ready to write with `esptool` alone. No compiler, no network. |
 | `firmware/prebuilt/flash.bat` | **Flash a unit by double-clicking it.** You press 1, 2 or 3 and type the port. Backs up first, then writes. |
 | `firmware/prebuilt/watch.bat` | **Watch what a board says** — the Serial Monitor without the Arduino IDE. |
-| `firmware/tools/copy_sketches.bat` | **Copy the node and wearable sketches into the Arduino sketchbook** before building them in the Arduino IDE. |
+| `firmware/tools/copy_sketches.bat` | **Copy the node and wearable sketches into the Arduino sketchbook** before building them in the Arduino IDE. Only needed when you have *changed* the code. |
 | `firmware/tools/flash_unit.py` | **Flash one unit from the prebuilt images:** `python firmware/tools/flash_unit.py --role node --port COM31`. |
+| `firmware/tools/check_prebuilt.py` | **Check that the offline images are up to date with the source** — and say which file moved if they are not. |
 
 ---
 

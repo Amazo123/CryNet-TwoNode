@@ -49,3 +49,8 @@ research/loudspeech/*.log
 
 # Arduino/PlatformIO build output kept out of the repository
 firmware/.build/
+
+# The local record of where the images were built (which commit, which
+# tool versions).  Not committed: it varies from machine to machine, and
+# BUILD_INFO.json next to it is what CI compares.
+firmware/prebuilt/.build-state.json

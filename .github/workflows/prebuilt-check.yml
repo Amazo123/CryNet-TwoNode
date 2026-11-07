@@ -1,0 +1,121 @@
+name: prebuilt images are up to date
+
+# The offline flash images in firmware/prebuilt/ are what a unit is flashed
+# with on a machine that has never compiled anything.  If they drift from
+# the source, a board gets firmware that is not in the repository -- and
+# nobody notices until the behaviour is wrong.
+#
+# Two jobs:
+#
+#   freshness  (fast, always)  the images were built from the source that is
+#                              in this commit.  This is the guard that
+#                              matters, and it needs no compiler.
+#   build      (slow)          the source still builds, and the rebuild is
+#                              compared with what is committed.
+
+on:
+  push:
+    branches: [main, feature/offline-flashing]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  freshness:
+    name: the offline images match the source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The freshness check compares the SHA-256 of every source file that
+      # went into each unit against the record in BUILD_INFO.json.  It needs
+      # nothing but Python and the repository.
+      - name: Check the images against the source
+        run: python firmware/tools/check_prebuilt.py
+
+  build:
+    name: the source still builds, and the images are what it produces
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The hub is a PlatformIO / ESP-IDF project.  It needs the two
+      # vendored components, pinned by revision in fetch_deps.sh.
+      - name: Fetch the vendored firmware dependencies
+        run: |
+          git clone --filter=blob:none https://github.com/espressif/esp-tflite-micro.git \
+            firmware/hub_infer/components/esp-tflite-micro
+          git -C firmware/hub_infer/components/esp-tflite-micro fetch --depth 1 origin dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
+          git -C firmware/hub_infer/components/esp-tflite-micro checkout dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
+          git clone --filter=blob:none https://github.com/espressif/esp-nn.git \
+            firmware/hub_infer/components/esp-nn
+          git -C firmware/hub_infer/components/esp-nn fetch --depth 1 origin 744d48deae6aa4a4d7b93b6a80f548d5298813a4
+          git -C firmware/hub_infer/components/esp-nn checkout 744d48deae6aa4a4d7b93b6a80f548d5298813a4
+          python firmware/tools/patch_deps.py
+
+      - name: Set up PlatformIO
+        uses: pioarduino/setup-pio@v2
+        with:
+          pio-version: 6.2.0
+
+      # The Arduino core for the node and the wearable.
+      - name: Install the Arduino core
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.12
+
+      - name: Rebuild all three units
+        run: python firmware/tools/make_prebuilt.py
+
+      # Two different failures, and they must not be confused:
+      #
+      #   the source changed but the images did not  ->  a real fault.  The
+      #     images in the repository no longer describe the code, and
+      #     someone is about to flash them.  Fail.
+      #
+      #   the images changed but the source did not  ->  the rebuild on
+      #     this machine differs by a build stamp or a path, not by
+      #     behaviour.  Report it, do not fail the build for it.
+      - name: Compare the rebuild with what is committed
+        run: |
+          set -u
+          SOURCE_CHANGED=0
+          IMAGES_CHANGED=0
+
+          if ! git diff --quiet -- firmware/hub_infer firmware/node firmware/wearable \
+                            firmware/tools/fetch_deps.sh firmware/tools/patch_deps.py; then
+            SOURCE_CHANGED=1
+          fi
+          if ! git diff --quiet -- firmware/prebuilt; then
+            IMAGES_CHANGED=1
+          fi
+
+          echo "source changed: $SOURCE_CHANGED   images changed: $IMAGES_CHANGED"
+
+          if [ "$SOURCE_CHANGED" = "1" ] && [ "$IMAGES_CHANGED" = "0" ]; then
+            echo ""
+            echo "::error::The firmware source changed but the offline flash images did not."
+            echo "Run:  python firmware/tools/make_prebuilt.py"
+            echo "and commit firmware/prebuilt/ as well."
+            exit 1
+          fi
+
+          if [ "$IMAGES_CHANGED" = "1" ] && [ "$SOURCE_CHANGED" = "0" ]; then
+            echo ""
+            echo "::notice::The rebuild differs from the committed images although the"
+            echo "source did not change.  That is normally a build stamp or a path in"
+            echo "the image, not a behaviour change.  The images still match the"
+            echo "source -- the freshness job is the one that decides that."
+            git diff --stat -- firmware/prebuilt
+          fi
+
+      - name: The rebuilt images match their own record
+        run: python firmware/tools/check_prebuilt.py

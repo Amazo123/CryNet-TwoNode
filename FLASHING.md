@@ -63,6 +63,8 @@ images you need are in `firmware/prebuilt/`:
 firmware/prebuilt/
 ├── README.md          what is in here and the two rules that matter
 ├── SHA256SUMS         the hash of every image, so you can prove it is intact
+├── BUILD_INFO.json    which source each image was built from, so you can
+│                      prove it is up to date
 ├── hub/                bootloader.bin  partitions.bin  firmware.bin
 ├── node/               bootloader.bin  partitions.bin  boot_app0.bin  app.bin
 └── wearable/           bootloader.bin  partitions.bin  boot_app0.bin  app.bin
@@ -551,7 +553,8 @@ and refresh the hashes:
 python firmware/tools/make_prebuilt.py
 ```
 
-That runs the three builds and rewrites `firmware/prebuilt/SHA256SUMS`:
+That runs the three builds and rewrites `firmware/prebuilt/SHA256SUMS` and
+`firmware/prebuilt/BUILD_INFO.json`:
 
 | Role | Built with | Needs |
 |---|---|---|
@@ -562,8 +565,31 @@ That runs the three builds and rewrites `firmware/prebuilt/SHA256SUMS`:
 Then check, and flash:
 
 ```powershell
+python firmware/tools/check_prebuilt.py    # are the images up to date with the source?
 python firmware/tools/flash_unit.py --check
 ```
+
+### Keeping the images in step with the source
+
+Nothing forces `firmware/prebuilt/` to match the code — a sketch can be edited
+and committed while the `.bin` files stay old, and the next person to flash a
+board gets firmware that is not in the repository. Three things prevent it:
+
+1. **`BUILD_INFO.json`** records, for every unit, the SHA-256 of every source file
+   that went into it. `check_prebuilt.py` recomputes them and compares; when they
+   differ it names the files that moved. The hashes are of the *content*, with line
+   endings normalised, so the answer is the same on every machine and in CI.
+2. **`flash.bat` runs the same check before it writes anything**, in PowerShell
+   (`firmware/prebuilt/check_prebuilt.ps1`) so it needs no Python. It refuses to
+   flash a stale or damaged image.
+3. **GitHub checks it on every push.** `.github/workflows/prebuilt-check.yml`
+   rebuilds all three units from the source and fails if the result differs from
+   what is committed.
+
+When `firmware/prebuilt/` is copied on its own, with no source beside it, the
+freshness check cannot be made — the check says so and carries on. The images are
+still verified against `SHA256SUMS`, and they were verified as up to date when they
+were committed.
 
 Two things worth knowing about the builds:
 

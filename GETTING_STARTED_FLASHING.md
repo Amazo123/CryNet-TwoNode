@@ -16,6 +16,16 @@ There are three ways to do this, and you only ever need **one** of them:
 
 Start with **Way A**. You can read B and C later, when you change code.
 
+**Two questions that come up straight away:**
+
+- *"Do I have to run `copy_sketches.bat` every time I upload to a node?"*
+  **No.** That step belongs to Way C only, and Way C is only for when you
+  have changed the node's code. To put the firmware on a node, use Way A.
+  See [C3](#c3-the-one-rule-that-catches-everyone).
+- *"How do I know the file it flashes is the current code?"* It checks
+  itself, every time, and refuses to write a stale one. See
+  [C7](#c7-keeping-the-offline-images-up-to-date).
+
 ---
 
 ## The one-paragraph version
@@ -474,17 +484,25 @@ can read the whole firmware.
 
 ## C3. The one rule that catches everyone
 
-**The Arduino IDE cannot build a sketch that lives in a normal folder.**
-It only builds sketches that sit inside its own sketchbook:
+> **Short answer to "do I have to run `copy_sketches.bat` every time I
+> upload to a node?" — No.**
+>
+> You only need it when you have **changed the node's code** and want to
+> build it in the Arduino IDE. If you are flashing a node that already has
+> the firmware, use **Way A** (`flash.bat`) and never touch
+> `copy_sketches.bat` at all — Way A writes the finished `.bin` straight
+> to the chip and does not involve the IDE or the sketchbook.
+
+**Why the copy exists.** The Arduino IDE's file picker starts in its own
+sketchbook:
 
 ```
 C:\Users\HP\Documents\Arduino\
 ```
 
-So the source of truth is in the repository, and it is **copied** into the
-sketchbook before building. If you edit the `.ino` in the repository and
-open it in the IDE, you will be building the **old** copy — this has
-caught out everyone who tried it.
+The real source of truth is in the repository, so if you edit the `.ino`
+in the repository and open *that* file in the IDE, you will be building
+the **old** copy — this has caught out everyone who tried it.
 
 **So: edit in the repository, then copy across.** The copy is one
 double-click:
@@ -496,9 +514,19 @@ C:\Users\HP\.t3\projects\fp-two-node\firmware\tools\copy_sketches.bat
 It copies `node_crynet`, `node_capture` and `wearable_crynet` into
 `C:\Users\HP\Documents\Arduino\`, replacing what was there.
 
+**When to run it:**
+
+| You are… | Run `copy_sketches.bat`? |
+|---|---|
+| Flashing a node that already has the firmware (Way A) | **No** — use `flash.bat` |
+| Changing the node's code, then building in the IDE | **Yes**, before you build |
+| Just watching what a node says | **No** — use `watch.bat` |
+
 ## C4. Build and upload a node in the Arduino IDE
 
-1. Run `copy_sketches.bat` (double-click it).
+1. **Only if you changed the node's code:** run `copy_sketches.bat`
+   (double-click it). If you did not change the code, skip this and go
+   straight to step 2.
 2. Start the **Arduino IDE** (it is at
    `C:\Users\HP\AppData\Local\Programs\Arduino IDE\Arduino IDE.exe`).
 3. Menu **File → Open…** (or **File → Sketch → Open**). Pick:
@@ -572,6 +600,70 @@ Two things to know about that script:
   `firmware.bin` as `f7f09a34…`. So a rebuild that changes nothing
   changes nothing in the image either — which is what makes
   `SHA256SUMS` a meaningful check.
+
+## C7. Keeping the offline images up to date
+
+Way A writes the `.bin` files that sit in `firmware\prebuilt\`. Those
+files have to stay in step with the code, or you flash something that is
+not what the repository says. Nothing forces that — a sketch can be
+edited and committed while the `.bin` files stay old — so there are
+three guards.
+
+**1. `flash.bat` refuses to flash a stale image.** Before it writes
+anything it runs `check_prebuilt.ps1`, which checks two things:
+
+```
+all 11 images verified.
+up to date  hub  (52 source files)
+up to date  node  (1 source files)
+up to date  wearable  (1 source files)
+the images are up to date with the source (3 of 3 units checked).
+```
+
+The first line says the images are intact (their SHA-256 matches
+`SHA256SUMS`). The rest says they were built from the source that is in
+the tree *now*. If the code has moved on, it says which files moved:
+
+```
+node: the source has changed since these images were built
+      changed  firmware/node/node_crynet/node_crynet.ino
+```
+
+and flashes nothing.
+
+**2. The same check runs on its own**, with no compiler needed:
+
+```powershell
+cd C:\Users\HP\.t3\projects\fp-two-node
+python firmware/tools/check_prebuilt.py
+```
+
+**3. GitHub checks it on every push.** The workflow
+`.github\workflows\prebuilt-check.yml` rebuilds all three units from the
+source and fails if the result differs from what is committed. So a
+change to the code that does not rebuild the images cannot pass review.
+
+**If you copy `firmware\prebuilt\` on its own** — onto a laptop with
+just `esptool` on it — there is no source next to it, so the freshness
+check cannot be made. It says so plainly and carries on:
+
+```
+not checked  hub  (the source is not in this folder)
+```
+
+The images are still verified against `SHA256SUMS`, so they are known to
+be intact. They were known to be up to date when they were committed.
+
+**When you change the code yourself**, rebuild and commit the result:
+
+```powershell
+cd C:\Users\HP\.t3\projects\fp-two-node
+python firmware/tools/make_prebuilt.py
+```
+
+That rebuilds all three units, rewrites `SHA256SUMS`, and writes
+`BUILD_INFO.json` — the record of which source each unit was built from.
+Commit `firmware\prebuilt\` along with your change.
 
 ---
 

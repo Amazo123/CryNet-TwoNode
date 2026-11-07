@@ -54,7 +54,11 @@ echo.
 echo   esptool: %ESP%
 echo.
 
-rem --- 3. check the images have not been damaged --------------------------
+rem --- 3. check the images are intact and up to date -----------------------
+rem  check_prebuilt.ps1 does two things: it verifies every image against
+rem  SHA256SUMS (so a damaged or truncated file cannot be written), and it
+rem  compares the source in the tree against the record of what the images
+rem  were built from (so a stale image cannot be written either).
 powershell -NoProfile -ExecutionPolicy Bypass -File "check_prebuilt.ps1"
 if errorlevel 1 (
     echo.

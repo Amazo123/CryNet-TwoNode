@@ -1,0 +1,129 @@
+{
+  "schema": 2,
+  "rules": {
+    "exclude_dirs": [
+      ".pio",
+      "build",
+      "managed_components",
+      ".git",
+      "__pycache__",
+      "esp-tflite-micro",
+      "esp-nn"
+    ],
+    "exclude_names": [
+      "c_cpp_properties.json",
+      "launch.json",
+      "ipch"
+    ],
+    "exclude_globs": [
+      "sdkconfig*",
+      ".browse.c_cpp.db*"
+    ],
+    "keep_globs": [
+      "sdkconfig.defaults"
+    ]
+  },
+  "roles": {
+    "hub": {
+      "roots": [
+        "firmware/hub_infer"
+      ],
+      "extras": [
+        "firmware/tools/fetch_deps.sh",
+        "firmware/tools/patch_deps.py"
+      ],
+      "files": {
+        "firmware/hub_infer/.gitignore": "67cca8c6c85c4698d0b5592a07a40ef2c16e9270cbe2773c6798944272525125",
+        "firmware/hub_infer/.vscode/extensions.json": "913d379558f6a8b0f08778a4f80b4ef0dd2e30b26b451adcd39b307763a9ff53",
+        "firmware/hub_infer/.vscode/settings.json": "f380089f7878a01b5f12e57ec11986b3d5dea2faa6496293f0f08a0bc426c551",
+        "firmware/hub_infer/CMakeLists.txt": "22e3d0a8b187c09b76e08653a5c588df8b9bfa276bdc1251e19cf380f0a1f5eb",
+        "firmware/hub_infer/components/ble_alert/CMakeLists.txt": "2bdf627133e4db5982f19c510cd290a9c788e3e8ae20e120744e5dcdf2110969",
+        "firmware/hub_infer/components/ble_alert/ble_alert.c": "8c2a08ef6130c0acb3f4586cd0a23bd3c39e040ae855dd7e824682f6f1fa939d",
+        "firmware/hub_infer/components/ble_alert/include/ble_alert.h": "c7790cff41838ee060754c5b203f9ae7717c07abb767e0734ce08b68e70b6860",
+        "firmware/hub_infer/components/crynet_dsp/CMakeLists.txt": "e65742c58a41df1c013daf9c6fe5c5cd36a4158df2b2220d5874cff5cef03ff2",
+        "firmware/hub_infer/components/crynet_dsp/crynet_dsp.c": "a87869b6dcb3bfa0db215b16def72e6b3789febf2b00606c7cbe4547c82033d5",
+        "firmware/hub_infer/components/crynet_dsp/include/crynet_dsp.h": "3a487005f77f3113342b8aa0347e989b964e91abcf950d78594f1c6c742ac444",
+        "firmware/hub_infer/components/crynet_dsp/include/crynet_probe_refs.h": "740268292c36b47f64994efd496be43479f7d503f96e342b9f3a64849b4279a6",
+        "firmware/hub_infer/components/crynet_dsp/reference/dsp_crynet.c": "f55264d708c8b113945919cae46e3f7b8e51db7c81e3056521d32349950f54e2",
+        "firmware/hub_infer/components/crynet_dsp/reference/dsp_crynet.h": "22e6baf6651f56e5a18adedc9d041961d06860db504013b711c216196307a4a4",
+        "firmware/hub_infer/components/crynet_infer/CMakeLists.txt": "20d7d60a7dfd2c8bb1a92fd6c3ae33f76122cbdace8898beae49fa19c5a77182",
+        "firmware/hub_infer/components/crynet_infer/crynet_infer.cpp": "8c43793017a8b43223d2cf33c5c7a2deeb52f9018c51a34333d97f866cf8a0bc",
+        "firmware/hub_infer/components/crynet_infer/include/crynet_infer.h": "327569c3e86f984792f9a84c20020a5b2d75b97218f2fb9b2b2fb75cd71c8085",
+        "firmware/hub_infer/components/crynet_model/CMakeLists.txt": "c7a06a20aa984828d37f47db247a8b5790d89167a940a12ea1b3a27a183b7737",
+        "firmware/hub_infer/components/crynet_model/crynet_model.c": "20491354debf62d427e33289e1e6d5a2a80fe64ec8722c317a8f75ce6bff3d0f",
+        "firmware/hub_infer/components/crynet_model/include/crynet_model.h": "201c9bd944892608c5c164a85bc984b9d09aea1acbb36b2d7577e49a942a35f6",
+        "firmware/hub_infer/components/crynet_model/include/crynet_tables.h": "b2aa28b322ac385eea27db9c20da4b435bb71694d560327d5164be5a1c45d72d",
+        "firmware/hub_infer/components/crynet_model/include/deploy_config.json": "be0aa3f2e4d7d2591229ca77c49ce8a849339650af1371663b1e4de2d9ad41a4",
+        "firmware/hub_infer/components/crynet_model/include/model_data.h": "80e92e09eb142b6f1909c921a0e9443cd573c18d15767d35f8d8af73fe576f37",
+        "firmware/hub_infer/components/crynet_model/reference/c_parity.json": "470deddb3cd70185e16f17d0f6a5f75dabf5e6dcd37bf30aaa15fbbbdae6883b",
+        "firmware/hub_infer/components/crynet_model/reference/crynet_float.tflite": "402e310cc5a073795c27724d4eda23d576a121d9445b645a4bca8b185f835291",
+        "firmware/hub_infer/components/crynet_model/reference/crynet_int8.tflite": "4aef55d8cfc0fb75aa944e73945ef5b832f12d71479c48f82aff58563126bc11",
+        "firmware/hub_infer/components/crynet_model/reference/metrics.json": "03d12b50b8eab657d88461641dec64e3a4a52ecadb354cbc04664fb1e7851cdc",
+        "firmware/hub_infer/components/crynet_proto/CMakeLists.txt": "1b8d66e8014ea1af60893fb3c00317991a31216d7c586b72e08025567f464579",
+        "firmware/hub_infer/components/crynet_proto/crynet_proto.c": "cbc2cda02070788e2116ada0b2267504ec43ebb4c538ad8316674f53b89b38e1",
+        "firmware/hub_infer/components/crynet_proto/include/crynet_proto.h": "d6bcce7f9ca6cb66ec7a005f3dfddb4add60e00050c99fb2f85b4fbf611fd0d7",
+        "firmware/hub_infer/components/hub_display/CMakeLists.txt": "14d7eb92da644e55684ca3138383df8d9a327b3f9a734c378cbece353fea6219",
+        "firmware/hub_infer/components/hub_display/font5x7.h": "dad5e2396896eea05408e5ad89ad16b8a842766e68d8e203e5f11fa1974de335",
+        "firmware/hub_infer/components/hub_display/hub_display.c": "6b44c10ba970c24163649e93abfba329b4f29b0e3b74ef51090e224145d7f98a",
+        "firmware/hub_infer/components/hub_display/ili9341.c": "f868c0f2b5c61ee6a798909e225172b907d165171b17e55d40f15799f92b8090",
+        "firmware/hub_infer/components/hub_display/ili9341.h": "b098d83277af29e1ea30841f36729e00001532486be8ec186fad0d983c57afb9",
+        "firmware/hub_infer/components/hub_display/include/hub_display.h": "9f4f020f15b0a45e34185e5279dec9edc2ea728219d391bae385ae18ee0e9ca7",
+        "firmware/hub_infer/components/node_link/CMakeLists.txt": "90a68e077672383a4c781825a1ec09903530b44a5a657736fa7e7f7eaeee0987",
+        "firmware/hub_infer/components/node_link/include/node_link.h": "b17e8933f1f77e6d7bd41926c3ec3a0ea0e1797eb61eaa986bf3da5ca8b8b4f4",
+        "firmware/hub_infer/components/node_link/node_link.c": "6c1c86f29e107b1603b381c62ca77959aa9fca6fe53d4286b123b1aa394879cb",
+        "firmware/hub_infer/dependencies.lock": "6923506ab28bbcd25b26f90db7403ff404ac128a095a48ce5cd1bac56c6c6074",
+        "firmware/hub_infer/partitions_16mb.csv": "ba922656212139c51d98a7b6bfe78ff17ebacd48aeb168b756026162337c10a7",
+        "firmware/hub_infer/platformio.ini": "248092a6cc420f57be1108ad9b77655ebf3041fca0f02b1487691d99b209d72c",
+        "firmware/hub_infer/sdkconfig.defaults": "1cb7f40b3ada8b9abb1050f782408310c1827276bb33e05ea7ff823d2983f49b",
+        "firmware/hub_infer/src/CMakeLists.txt": "f0bb9069a0139fba91115870c1d8e30b31b7d18dd1db6c23db9a4d1a2c01e486",
+        "firmware/hub_infer/src/console.c": "d5e74933a58e084f984cff51ec27d327a0b65e780c4f3ae354ec250a01d3c529",
+        "firmware/hub_infer/src/console.h": "e5899803e42dd1843f4a621e772c076a59e8fcc6dc65206c6f44b2e6e93dab9e",
+        "firmware/hub_infer/src/link_stage.c": "a141db437900cb26430efb56bdf0b6913d838ab61a8e512bdb18c6fad5880d31",
+        "firmware/hub_infer/src/link_stage.h": "ceab549ff0ee2534e48c08784049729016901c61cf74a504ace10793f3e1c4bc",
+        "firmware/hub_infer/src/main.c": "426ee6181cc39e5ec84e3608a59bd2382876520bebc38c4a30d1bc154d7a0799",
+        "firmware/hub_infer/src/probes.c": "c2043e1804f5e8efec81b4a09c5db32946966de0a8899d42cffe311a92d952c1",
+        "firmware/hub_infer/src/probes.h": "4030321230e876f8054ceb36c15bdf2eddae2e6b32bf931895f0ed019f97c14f",
+        "firmware/tools/fetch_deps.sh": "41143522bc5ac4f50559dcd21444fdc56b5a15dd16e942b3600d69da705b3a42",
+        "firmware/tools/patch_deps.py": "16560caf7c506e8d27115644a52e3812335ec448adee3c6afca513fe29f22f6c"
+      },
+      "source_fingerprint": "7ebe61d46bec5b4b59bea3f5c70422caa8b8d72a8e7cee3f37bc6b465f4aeb4d",
+      "images": {
+        "bootloader.bin": "aefe21ad9f40735b7ebc07c2b6ad3eeb440477baed575bfc205f78a043c6282e",
+        "firmware.bin": "f7f09a34a7d115cd45fa8df86d3c14fca9bd5c91a6367869d2c060557fed1f76",
+        "partitions.bin": "463793a642ab4a905bd6b4c0b07c749d4ba199ef459b0a91450ca21c0cd581d4"
+      }
+    },
+    "node": {
+      "roots": [
+        "firmware/node/node_crynet"
+      ],
+      "extras": [],
+      "files": {
+        "firmware/node/node_crynet/node_crynet.ino": "7f26280abd194e962dd94819ef05e705f4d52623b3f8469775776c58c084a748"
+      },
+      "source_fingerprint": "a715bd57edc46a8a7deed56807bb648daa056059c134d5afaf4739037b2c7ef7",
+      "images": {
+        "app.bin": "aabb406f49335423ce75ab6bf159e17be110b912da6bcf7475a51cf915eea371",
+        "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+        "bootloader.bin": "9b2fa5e4af7cf282b2db5ed726b26bcca0aec7946eb3fdacc14444195ba754b3",
+        "partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1"
+      }
+    },
+    "wearable": {
+      "roots": [
+        "firmware/wearable/wearable_crynet"
+      ],
+      "extras": [],
+      "files": {
+        "firmware/wearable/wearable_crynet/wearable_crynet.ino": "4fdc0e51714446f1cbebd72d0a28f0473ff4fafd122962869a1effa5202e2559"
+      },
+      "source_fingerprint": "7071ab878821afe3f65d6c9b79ea28f1b340f0dbecb66d094c050ab6004e5de3",
+      "images": {
+        "app.bin": "193cdaaf12899ea855ae43e6c8712fca81c403d273dfc43f15ca1991b13bda2a",
+        "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+        "bootloader.bin": "9b2fa5e4af7cf282b2db5ed726b26bcca0aec7946eb3fdacc14444195ba754b3",
+        "partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1"
+      }
+    }
+  }
+}

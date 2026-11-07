@@ -16,7 +16,9 @@ What it does, per role:
             (needs the ESP32 core, already installed)
 
 It then writes firmware/prebuilt/SHA256SUMS, which `flash_unit.py --check`
-verifies before every flash.
+verifies before every flash, and firmware/prebuilt/BUILD_INFO.json, which
+records which source each unit was built from -- that is what
+`check_prebuilt.py` uses to prove the shipped images are still up to date.
 
     python firmware/tools/make_prebuilt.py                # everything
     python firmware/tools/make_prebuilt.py --role node
@@ -31,6 +33,10 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import prebuilt_lib  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 PREBUILT = ROOT / "firmware" / "prebuilt"
@@ -149,6 +155,31 @@ def build_sketch(role: str) -> int:
     return 0
 
 
+def tool_versions() -> dict[str, str]:
+    """What built these images, so the record says."""
+    versions: dict[str, str] = {}
+    pio = find_platformio()
+    if pio:
+        try:
+            out = subprocess.run([pio, "--version"], capture_output=True,
+                                 timeout=60, check=False)
+            if out.returncode == 0:
+                versions["platformio"] = out.stdout.decode().strip().splitlines()[0]
+        except (OSError, subprocess.SubprocessError):
+            pass
+    cli = find_arduino_cli()
+    if cli:
+        try:
+            out = subprocess.run([cli, "version"], capture_output=True,
+                                 timeout=60, check=False)
+            if out.returncode == 0:
+                versions["arduino-cli"] = out.stdout.decode().strip().splitlines()[0]
+        except (OSError, subprocess.SubprocessError):
+            pass
+    versions["fqbn"] = FQBN
+    return versions
+
+
 def write_sums() -> None:
     lines = [
         "# SHA-256 of the prebuilt flash images.",
@@ -160,6 +191,16 @@ def write_sums() -> None:
         lines.append(f"{sha256(path)}  {rel}")
     (PREBUILT / "SHA256SUMS").write_text("\n".join(lines) + "\n")
     print(f"wrote {PREBUILT / 'SHA256SUMS'}")
+
+
+def write_build_info() -> None:
+    """Record which source each unit was built from.
+
+    All three units are recorded, not only the ones just built: a partial
+    rebuild must not drop the record of the others.
+    """
+    path = prebuilt_lib.write_build_info(tools=tool_versions())
+    print(f"wrote {path}")
 
 
 def main() -> int:
@@ -178,6 +219,7 @@ def main() -> int:
         print()
 
     write_sums()
+    write_build_info()
     return 0
 
 

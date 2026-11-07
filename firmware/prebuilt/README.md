@@ -23,6 +23,23 @@ python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15
 `SHA256SUMS` holds the SHA-256 of every image. `flash_unit.py --check` compares the
 files against it and refuses to flash if anything does not match.
 
+`BUILD_INFO.json` holds the record of what each image was built from: for every unit,
+the SHA-256 of every source file that went into it. `check_prebuilt.py` recomputes
+those and compares, so a sketch that was edited while the `.bin` files stayed old is
+caught before anyone flashes it.
+
+## Keeping them up to date
+
+```powershell
+python firmware/tools/check_prebuilt.py     # are the images current with the source?
+python firmware/tools/make_prebuilt.py      # rebuild them and refresh the record
+```
+
+`flash.bat` runs the same check (in PowerShell, so it needs no Python) before it
+writes anything, and refuses to flash an image that is stale or damaged. GitHub runs
+it on every push: `.github/workflows/prebuilt-check.yml` rebuilds all three units and
+fails if the result differs from what is committed.
+
 ## Two rules that matter
 
 **Write the regions, not one merged file.** A merged image fills the gaps between the
@@ -40,9 +57,9 @@ loop right after power-on. The bootloader header in `hub/bootloader.bin` says DI
 python firmware/tools/make_prebuilt.py
 ```
 
-That compiles all three from source and rewrites `SHA256SUMS`. It needs the Arduino
-core 3.3.12 and, for the hub, the vendored `esp-tflite-micro` and `esp-nn`
-components (`bash firmware/tools/fetch_deps.sh`, once, with network).
+That compiles all three from source, rewrites `SHA256SUMS` and writes `BUILD_INFO.json`.
+It needs the Arduino core 3.3.12 and, for the hub, the vendored `esp-tflite-micro` and
+`esp-nn` components (`bash firmware/tools/fetch_deps.sh`, once, with network).
 
 The hub build is reproducible: rebuilding it produced a `firmware.bin` byte-identical
 to the one flashed to the bench units on 2026-11-07.
