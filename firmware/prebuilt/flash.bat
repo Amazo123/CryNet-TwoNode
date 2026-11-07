@@ -107,16 +107,19 @@ exit /b 0
 :MAC
 set "PORT=%~1"
 echo     %PORT% ...
-"%ESP%" --chip esp32c3 --port %PORT% chip-id 2>nul | findstr /C:"MAC:" >nul
+rem  match the MAC address itself (six hex pairs) rather than a label,
+rem  so it works whatever esptool calls the line
+set "RE=[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]"
+"%ESP%" --chip esp32c3 --port %PORT% chip-id 2>nul | findstr /R /C:"%RE%" >nul
 if not errorlevel 1 (
     echo       this is an ESP32-C3 - a cot node or the wearable
-    "%ESP%" --chip esp32c3 --port %PORT% chip-id 2>nul | findstr /C:"MAC:"
+    "%ESP%" --chip esp32c3 --port %PORT% chip-id 2>nul | findstr /R /C:"%RE%"
     goto :eof
 )
-"%ESP%" --chip esp32s3 --port %PORT% chip-id 2>nul | findstr /C:"MAC:" >nul
+"%ESP%" --chip esp32s3 --port %PORT% chip-id 2>nul | findstr /R /C:"%RE%" >nul
 if not errorlevel 1 (
     echo       this is an ESP32-S3 - the hub
-    "%ESP%" --chip esp32s3 --port %PORT% chip-id 2>nul | findstr /C:"MAC:"
+    "%ESP%" --chip esp32s3 --port %PORT% chip-id 2>nul | findstr /R /C:"%RE%"
     goto :eof
 )
 echo       nothing answered on this port

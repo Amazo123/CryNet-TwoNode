@@ -177,7 +177,7 @@ What a healthy board says:
 
 | Unit | Lines to look for |
 |---|---|
-| Hub | `RESULT: PASS — 4 probes`, then `node 1 online`, `node 2 online` |
+| Hub | `RESULT: PASS — 4 probes`, then `node 1 is online`, `node 2 is online` |
 | Cot node | `node 1 mac 90:DA:72:85:C5:44` (or `node 2 mac ...`) |
 | Wearable | `[oled] up` and `[ble] state: 2 cot(s), mask 0x00` |
 
@@ -217,8 +217,11 @@ it survives a reflash. A brand-new board has no number, so it guesses
 one from its MAC — and two new boards can guess the same one.
 
 The hub only listens to **cot 1 and cot 2**. A node on any other number
-is ignored, and the hub says so on its console:
-`WARNING: hub watches cots 1 2 only.`
+is ignored, and **the node says so on its own console** at boot:
+
+```
+WARNING: this hub watches cots 1 and 2 only. Set this board with "id 1" or "id 2".
+```
 
 To set it, open `watch.bat` on that node's port and type:
 
@@ -370,8 +373,8 @@ field in the **bottom-right status bar** and pick yours from the list.
    ```
    I (3509) crynet: RESULT: PASS — 4 probes, front end model agree host
    I (4363) ili9341: panel up: 320 x 240, rotation 2 (madctl 0x80)
-   I (4393) link: node 1 online
-   I (4395) link: node 2 online
+   I (4393) link: node 1 is online
+   I (4395) link: node 2 is online
    ```
 
    `RESULT: PASS` means the hub's own self-check agrees with the host
@@ -678,7 +681,7 @@ Print this, or keep it on screen next to the boards.
    -> the hub only listens to cots 1 and 2
 
 4. CHECK THE LOG (watch.bat, or Arduino IDE Serial Monitor)
-   hub:      "RESULT: PASS - 4 probes", "node 1 online", "node 2 online"
+   hub:      "RESULT: PASS - 4 probes", "node 1 is online", "node 2 is online"
              and NO "bat" field in the link: lines
    node:     "node 1 mac 90:DA:72:85:C5:44"  (id 1)
              "node 2 mac 90:DA:72:87:CB:98"  (id 2)
