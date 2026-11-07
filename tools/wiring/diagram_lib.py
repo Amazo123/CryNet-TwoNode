@@ -194,45 +194,6 @@ class Page:
 
     # -- reusable sub-circuits ----------------------------------------------
 
-    def battery_sense(self, bx, by, sx, sy, label="1.31 V"):
-        """Battery-sense divider, drawn in the band below the boards.
-
-        (bx, by) is the module's B+ pad; (sx, sy) is the board's ADC pin.
-        The 220 k top resistor and the 100 k / 100 nF shunt pair make a
-        fixed x3.2 divider: about 1.31 V at a 4.2 V cell.
-
-        The resistors are deliberately FIXED (D-81).  A two-terminal pot
-        in this path cannot divide at all: the ADC pin's only path to
-        ground is its own high-impedance input, so the pin still sees
-        4.2 V.  A three-terminal pot used as a real divider would work,
-        but it would need a per-unit measured ratio and would drift
-        silently - and 1 % of ratio error is already ~10 points of SOC,
-        because BAT_CURVE moves 100 mV = 20 percentage points at 3.8 V.
-
-        The routing channel sits at x=248, clear of the module's ground
-        symbol at x=225 - a wire through a ground symbol reads as a
-        connection, and the layout checker cannot see that.
-        """
-        self.wire([(bx, by), (248, by), (248, 375), (250, 375)], color="red")
-        self.part(250, 362, 76, 26, "220 kΩ")
-        self.wire([(326, 375), (345, 375)], color="red")
-        self.dot(345, 375)
-        self.label(352, 366, label, size=11, cls="small", mono=True)
-        self.label(256, 352, "sense divider", size=11, cls="small")
-        # shunt pair
-        self.wire([(345, 375), (345, 398)], color="black")
-        self.wire([(345, 398), (320, 398)], color="black")
-        self.wire([(345, 398), (370, 398)], color="black")
-        self.vpart(308, 400, 24, 44, "100 kΩ", anchor="end", label_dx=-4)
-        self.vpart(358, 400, 24, 44, "100 nF", label_dx=4)
-        self.wire([(320, 444), (320, 456)], color="black")
-        self.ground(320, 456)
-        self.wire([(370, 444), (370, 456)], color="black")
-        self.ground(370, 456)
-        # sense node out to the ADC pin
-        self.wire([(345, 375), (sx, 375), (sx, sy)], color="black")
-        return self
-
     # -- checks -------------------------------------------------------------
 
     def check(self):

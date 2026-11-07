@@ -23,13 +23,14 @@ the panel — it is never heard.
 ┌──────────────────────────────────────┐
 │ COT 1                      ONLINE    │   name and state
 │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  RMS 0.012      │   level bar with its number
-│ ▂▃▄█  LINK -58 dBm        BAT ~92%   │   network bar, link, battery
+│ ▂▃▄█  LINK -58 dBm                  │   network bar and link
 └──────────────────────────────────────┘
 ```
 
-The RMS used to share its line with the battery, which put three readings
-on one row and made the card hard to read in a dark room. Each pair now has
-a row of its own.
+The RMS used to share its line with the link, which put two readings on one
+row and made the card hard to read in a dark room. Each pair now has a row
+of its own. There is no battery line on the card: the cots do not measure
+their cells any more (D-83).
 
 **A network bar on both ends.** The hub's link layer already measured each
 cot's RSSI but never exposed it; it now reaches the panel, where each cot
@@ -42,12 +43,14 @@ to be live the hub now sends a **heartbeat every second** — the protocol
 already defined that frame type and the nodes always understood it, but the
 hub had never sent one.
 
-**The connection LED is now real.** `SYSTEM_WIRING.md` 5.1 specifies a
-GPIO10 connection LED on the node, lit only while a valid hub heartbeat has
-arrived within a timeout. That was not implementable while the hub sent no
-heartbeat. It now lights on a fresh heartbeat, slow-blinks when the board is
-alive but the hub is answering nothing, and goes dark after three seconds of
-silence.
+**There is no connection LED.** `SYSTEM_WIRING.md` 5.1 used to specify a
+GPIO10 connection LED on the node, lit only while a valid hub heartbeat had
+arrived within a timeout. It worked, and it has been removed (D-83): the
+hub's panel already says which cots are answering, and a second, slower
+copy of the same answer on the cot itself was saying it in a place nobody
+was looking. The heartbeat and its ACK stay — they are how the node knows
+the hub is there — and the node prints the same fact on its serial console
+(`status`). GPIO10 is free.
 
 ## Layout on the bench
 
@@ -93,7 +96,7 @@ Built and compile-verified on all three targets: hub RAM 13.0 % / flash
 redesigned panel was rendered to a mock (`research/out/two_node_display_mock.png`)
 before flashing. The hardware pass is still owed: flash the hub and the two
 cots, confirm the two cards and their network bars on the real panel, and
-confirm the GPIO10 LED lights when the hub is answering.
+confirm the heartbeat keeps the hub's view of each cot fresh.
 
 `SYSTEM_UPDATE.md` holds the full history and the reasoning behind each
 change.

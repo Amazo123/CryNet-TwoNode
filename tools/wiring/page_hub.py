@@ -8,7 +8,7 @@ W, H = 1000, 490
 def build():
     p = Page(W, H, "3 / Main hub - complete wiring (x1)",
              "ESP32-S3-DevKitC-1 N16R8 + 2.8\" ILI9341 (backlight on 3V3, "
-             "always on) + LX-LCBST + switch + battery-sense divider + 2 LEDs")
+             "always on) + LX-LCBST + switch - no battery sense, no status LEDs")
 
     # ---------------------------------------------------------- LX-LCBST --
     mod = p.box(25, 55, 175, 245, "LX-LCBST-TC-001", cls="proposed",
@@ -32,10 +32,6 @@ def build():
                     ("GPIO12", 255), ("GPIO13", 290), ("GPIO14", 325)):
         p.label(577, y + 5, name, size=12.5, cls="pin", anchor="end", mono=True,
                 owner=board)
-    # bottom row: GPIO1 = ADC, GPIO17 = SOC LED, GPIO2 = BLE LED
-    for name, x in (("GPIO1", 420), ("GPIO17", 510), ("GPIO2", 558)):
-        p.label(x, 347, name, size=12.5, cls="pin", anchor="middle", mono=True,
-                owner=board)
 
     # --------------------------------------------------------------- TFT --
     tft = p.box(690, 55, 180, 292, "2.8\" ILI9341", cls="mod")
@@ -54,10 +50,6 @@ def build():
     p.ground(225, 274, dir="right")
     p.wire([(390, 320), (355, 320)], color="black")
     p.ground(355, 320, dir="left")
-
-    # ------------------------------------------------- battery sense ------
-    # the sense tap lands on GPIO1 (ADC1_CH0) at the bottom of the board
-    p.battery_sense(200, 225, 420, 355)
 
     # ------------------------------------------------------------- TFT ---
     p.wire([(585, 105), (690, 105)], color="red")
@@ -78,24 +70,13 @@ def build():
     p.label(596, 366, "Backlight: LED pin on 3.3 V - always on, no dimming.",
             size=12, cls="note")
 
-    # ------------------------------------------------------------ LEDs ---
-    # GPIO2 = blue BLE-status LED
-    p.wire([(558, 355), (558, 395), (650, 395)], color="blue")
-    p.part(650, 382, 72, 26, "1 kΩ")
-    p.wire([(722, 395), (740, 395)], color="blue")
-    p.part(740, 382, 70, 26, "BLUE LED")
-    p.wire([(810, 395), (830, 395)], color="blue")
-    p.ground(830, 395, dir="right")
-    p.label(856, 399, "BLE", size=11, cls="small")
-
-    # GPIO17 = amber SOC LED
-    p.wire([(510, 355), (510, 440), (650, 440)], color="orange")
-    p.part(650, 427, 72, 26, "1 kΩ")
-    p.wire([(722, 440), (740, 440)], color="orange")
-    p.part(740, 427, 70, 26, "AMBER LED")
-    p.wire([(810, 440), (830, 440)], color="orange")
-    p.ground(830, 440, dir="right")
-    p.label(856, 444, "SOC", size=11, cls="small")
+    # --------------------------------------------- no sense, no LEDs -----
+    # The band the divider and the two LEDs used to occupy now says
+    # what is there instead, which is nothing (D-83).
+    p.label(210, 382, "No battery sense and no status LEDs (D-83).",
+            size=13, cls="note")
+    p.label(210, 404, "GPIO1 (ADC), GPIO17 and GPIO2 are free.",
+            size=12, cls="note")
 
     notes = (
         '<div class="ok">Verified on the live system: the TFT signal pins '
@@ -106,22 +87,19 @@ def build():
         'drives GPIO4 as a backlight output (hub_display.c: PIN_BL 4, '
         'ili9341_backlight_set), so GPIO4 is left unconnected and the '
         'brightness control on the panel has no effect on the glass.</div>'
-        '<div class="warning">Plan only - the hub firmware does none of '
-        'this yet: it has no analogReadMilliVolts at all and drives no LED. '
-        'So the GPIO1 divider (ADC1_CH0), the GPIO2 blue BLE LED and the '
-        'GPIO17 amber SOC LED are wiring plans, not working circuits. '
-        '(BAT_CURVE / battery_band_advance in hub_display.c describe the '
-        'NODES\' reported cell voltage, not the hub\'s own cell.) The hub\'s '
-        'peak current with TFT + radios is unmeasured - confirm the LX-LCBST '
-        'holds 5.1 V during bursts before trusting it here.</div>'
+        '<div class="ok"><b>No battery sense and no LEDs (D-83).</b> The GPIO1 divider '
+        '(ADC1_CH0), the GPIO2 blue BLE-status LED and the GPIO17 amber SOC LED have been '
+        'removed before they were fitted. The hub does not measure its own cell and drives '
+        'no indicator: the panel is the only display, and the wearable tells the caregiver '
+        'what the hub is doing over BLE. <b>Do not fit a divider or an LED on this board.</b> '
+        'GPIO1, GPIO2 and GPIO17 are free.</div>'
+        '<div class="warning">The hub\'s peak current with TFT + radios is unmeasured - '
+        'confirm the LX-LCBST holds 5.1 V during bursts before trusting it here.</div>'
         '<div class="ok"><b>Cell (D-81):</b> an 18650 Li-ion cell, 3.7 V nominal / 4.2 V '
         'full, 3000 mAh or better, <b>protected</b>, in a holder - the hub draws the most '
         'current of any unit, so it is the cell most worth sizing carefully. '
         '<b>Never LiFePO4</b>: the module charges to 4.2 V and an LFP cell tops out at '
-        '3.65 V. The <b>divider is a fixed 220 k&#937; / 100 k&#937; pair</b> (x3.2) - '
-        'no potentiometer in the battery path - a two-terminal pot cannot divide; '
-        'a three-terminal one needs a per-unit ratio and drifts. The 100 nF is '
-        'required.</div>'
+        '3.65 V.</div>'
     )
     foot = ("GPIO35-37 are the Octal PSRAM bus - never wire them. The TFT "
             "signal wiring is the recorded working one for the existing "

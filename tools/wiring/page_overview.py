@@ -32,12 +32,12 @@ def build():
 
     # -------------------------------------------------------- the units ---
     p.box(30, 205, 250, 95, "Cot node  x2", cls="mod",
-          sub=["ESP32-C3 + INMP441 mic", "battery sense + 2 LEDs"])
+          sub=["ESP32-C3 + INMP441 mic", "no battery sense, no LEDs"])
     p.box(375, 205, 250, 95, "Main hub  x1", cls="mod",
-          sub=["ESP32-S3 + 2.8\" ILI9341", "battery sense + 2 LEDs",
+          sub=["ESP32-S3 + 2.8\" ILI9341", "no battery sense, no LEDs",
                "backlight on 3V3 - always on"])
     p.box(720, 205, 250, 95, "Caregiver wearable  x1", cls="mod",
-          sub=["ESP32-C3 + SSD1306 OLED", "haptic motor + battery sense; no LEDs"])
+          sub=["ESP32-C3 + SSD1306 OLED", "haptic motor; no LEDs, no sense"])
 
     p.wire([(280, 252), (375, 252)], color="teal", width=2, dash="7 5")
     p.label(292, 242, "ESP-NOW", size=11, cls="small", color="#15979c")
@@ -56,11 +56,12 @@ def build():
 
     notes = (
         '<div class="warning">Proposed, bench-validation pending: the whole battery chain. '
-        'Firmware status: on the node the battery divider and the GPIO10 blue link LED '
-        'exist and run; the GPIO7 amber SOC LED does not (no GPIO7 in node_crynet.ino). '
-        'The hub firmware has no ADC read and no LED output at all, so its divider and its '
-        'two LEDs are plan only. The wearable has no LEDs - the OLED carries the state '
-        '(it shows LINK or SCAN today).</div>'
+        '<b>No unit has a battery sense or a status LED (D-83)</b> - the node\'s divider '
+        'and its GPIO10 blue link LED, the node\'s GPIO7 amber SOC LED, the hub\'s GPIO1 '
+        'divider, the hub\'s GPIO2 BLE LED and the hub\'s GPIO17 SOC LED have all been '
+        'removed. The wearable has no LEDs either - the OLED carries the state (it shows '
+        'LINK or SCAN today). The hub\'s panel is the only display in the system, so '
+        'nothing anywhere will warn the caregiver that a cell is nearly flat.</div>'
         '<div class="ok"><b>Cells (D-81):</b> an 18650 (3.7 V, 4.2 V full, 3000 mAh) on each '
         'node and the hub, because a node sits on a cot frame within a baby&#39;s reach and '
         'needs a cell that cannot be punctured; a 1000 mAh Li-Po pouch on the wearable, '

@@ -1,7 +1,6 @@
 """Page 4 - caregiver wearable: the complete unit on one page.
 
-Power chain, OLED, battery sense and the BC547 haptic drive all
-live here.  The haptic drive used to be a separate page; the user wants
+Power chain, OLED and the BC547 haptic drive all live here.  The haptic drive used to be a separate page; the user wants
 one wearable diagram they can follow with the parts in their hand.
 """
 
@@ -12,8 +11,8 @@ W, H = 1000, 540
 
 def build():
     p = Page(W, H, "4 / Caregiver wearable - complete wiring (x1)",
-             "ESP32-C3 SuperMini + SSD1306 OLED + LX-LCBST + switch + battery-sense "
-             "divider + BC547 haptic drive (status on OLED)")
+             "ESP32-C3 SuperMini + SSD1306 OLED + LX-LCBST + switch + BC547 haptic "
+             "drive (status on OLED)")
 
     # ---------------------------------------------------------- LX-LCBST --
     mod = p.box(25, 55, 175, 245, "LX-LCBST-TC-001", cls="proposed",
@@ -36,7 +35,7 @@ def build():
     for name, y in (("3V3", 110), ("GPIO5", 145), ("GPIO6", 175)):
         p.label(577, y, name, size=12.5, cls="pin", anchor="end", mono=True,
                 owner=board)
-    for name, x in (("GPIO3", 420), ("GPIO7", 470), ("3V3", 520)):
+    for name, x in (("GPIO7", 470), ("3V3", 520)):
         p.label(x, 347, name, size=12.5, cls="pin", anchor="middle", mono=True,
                 owner=board)
 
@@ -61,10 +60,6 @@ def build():
     p.wire([(390, 320), (360, 320)], color="black")
     p.ground(360, 320, dir="left")
 
-    # ------------------------------------------------- battery sense ------
-    # B+ feeds the divider, the tap lands on GPIO3 (ADC)
-    p.battery_sense(200, 229, 420, 355)
-
     # ------------------------------------------------------------- OLED ---
     p.wire([(585, 110), (690, 110)], color="red")
     p.label(600, 101, "3.3 V", size=11, cls="small", color="#c43e39")
@@ -76,8 +71,7 @@ def build():
     # Link and battery status belong on the OLED, not separate LEDs.
     p.label(690, 250, "No wearable status LEDs", size=13, cls="note")
     p.label(690, 270, "OLED shows LINK / SCAN today", size=12, cls="note")
-    p.label(690, 288, "SOC readout needs the divider + firmware", size=12,
-            cls="note")
+    p.label(690, 288, "No SOC readout either (D-83)", size=12, cls="note")
 
     # =================================================== haptic drive ====
     # BC547 low-side switch: GPIO7 -> 2.2 k -> base, motor in the collector
@@ -139,19 +133,15 @@ def build():
     p.ground(950, 475, dir="right")
 
     notes = (
-        '<div class="warning">Divider confirmed: 220 k&#937; from B+ and 100 k&#937; to '
-        'ground give 4.2 V &#215; 100/320 = 1.31 V at the ADC (the 100 nF filters it), '
-        '13 uA of divider current; the node firmware already uses this ratio '
-        '(reading &#215; 3.2). <b>The divider is fixed on purpose (D-81)</b> - no '
-        'potentiometer in the battery path - a two-terminal pot cannot divide; a '
-        'three-terminal one needs a per-unit ratio and drifts. The 100 nF is '
-        'required. Motor: the 10 &#937; caps the stall '
+        '<div class="ok"><b>No battery sense and no LEDs (D-83).</b> The 220 k&#937; / '
+        '100 k&#937; divider and its 100 nF are withdrawn, and the wearable has no '
+        'indicator of any kind: the OLED carries LINK and SCAN, and says nothing about '
+        'the cell. <b>Do not fit a divider or an LED on this board.</b> GPIO3 is free. '
+        'Motor: the 10 &#937; caps the stall '
         'current at 3.3 V &#247; (R + 10 &#937;) - about 69 mA for a 37 &#937; coin ERM, '
         'inside the BC547\'s 100 mA; a lower-impedance motor needs 22 &#937; or a 2N2222A. '
-        'GPIO7 drives the switch in 250 ms pulses. <b>No LEDs are fitted.</b> The OLED '
-        'carries the state and the firmware already shows LINK or SCAN on it. The '
-        'battery/SOC readout needs the GPIO3 divider wired AND firmware that does not '
-        'exist yet - branch work.</div>'
+        'GPIO7 drives the switch in 250 ms pulses. The OLED carries the state and the '
+        'firmware already shows LINK or SCAN on it.</div>'
         '<div class="ok"><b>Cell (D-81):</b> a 1000 mAh Li-Po <i>pouch</i> here, not an '
         '18650 - an 18650 is 18 x 65 mm and 48 g and cannot go on a wrist, while the '
         'node and the hub take an 18650 because a cot frame can puncture a pouch. Same '

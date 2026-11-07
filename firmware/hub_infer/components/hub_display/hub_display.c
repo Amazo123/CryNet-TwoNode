@@ -133,10 +133,9 @@ static const char *TAG = "hub_display";
 #define CARD_X       10
 #define CARD_W       300
 /* Two cot cards, taller now: each carries the cot's name and state,
- * an RMS bar with its number, and a bottom row with the radio link
- * (a small signal bar plus the RSSI) and the battery.  88 + 2*70 puts
- * the last card's bottom edge at 222, leaving room for the footer at
- * 230. */
+ * an RMS bar with its number, and a bottom row with the radio link --
+ * a small signal bar plus the RSSI.  88 + 2*70 puts the last card's
+ * bottom edge at 222, leaving room for the footer at 230. */
 #define CARD_H       64
 #define CARD_Y0      88
 #define CARD_STEP    70
@@ -632,38 +631,6 @@ static void draw_level_bar(int x, int y, int w, int h, float level,
     fb_rect(x, y, w, h, known ? C_BORDER : blend(C_BORDER, C_BG, 0.45f));
 }
 
-/* The battery percentage, read off the cell voltage.
- *
- * This is a resting-voltage curve for an ordinary Li-Po, not a
- * measurement of this project's cell -- none has been profiled yet
- * (SYSTEM_WIRING.md 7 says percentages must come from the actual cell,
- * not nominal voltages).  It is shown with a tilde, and it only has to
- * separate "fine" from "charge soon"; when the real cell has been
- * measured through a discharge, this table gets replaced with its
- * curve. */
-static const uint16_t BAT_CURVE[][2] = {
-    /* millivolts, percent */
-    { 4200, 100 }, { 4050,  90 }, { 3900,  65 }, { 3800,  40 },
-    { 3700,  20 }, { 3550,   8 }, { 3450,   3 }, { 3300,   0 },
-};
-
-static uint8_t battery_percent(uint16_t mv)
-{
-    if (mv >= BAT_CURVE[0][0]) {
-        return 100;
-    }
-    for (size_t i = 1; i < sizeof BAT_CURVE / sizeof BAT_CURVE[0]; i++) {
-        if (mv >= BAT_CURVE[i][0]) {
-            const uint32_t span = BAT_CURVE[i - 1][0] - BAT_CURVE[i][0];
-            const uint32_t up = mv - BAT_CURVE[i][0];
-            const uint32_t pct = BAT_CURVE[i][1] +
-                (up * (uint32_t)(BAT_CURVE[i - 1][1] - BAT_CURVE[i][1])) / span;
-            return (uint8_t)(pct > 100u ? 100u : pct);
-        }
-    }
-    return 0;
-}
-
 /* How many bars a telemetry RSSI is worth.  2.4 GHz links in a house:
  * anything above -60 dBm is a strong link, below -90 is barely there. */
 static int rssi_bars(int8_t rssi)
@@ -693,30 +660,6 @@ static void draw_signal_bars(int x, int y, int bars)
         const int h = 4 + i * 3;
         fb_fill(x + i * 5, y - h, 3, h, (i < bars) ? col : C_SURFACE_HI);
     }
-}
-
-/* The battery, right-aligned on the bottom row of a cot card. */
-static void draw_battery(int x, int y, int w, const hub_display_node_t *n)
-{
-    char bat[40];
-    uint16_t col;
-    switch (n->battery_band) {
-    case HUB_BAT_NORMAL:
-        snprintf(bat, sizeof bat, "BAT ~%u%%", (unsigned)battery_percent(n->battery_mv));
-        col = C_GREEN;
-        break;
-    case HUB_BAT_LOW:
-        snprintf(bat, sizeof bat, "BAT LOW");
-        col = C_AMBER;
-        break;
-    case HUB_BAT_CRITICAL:
-        snprintf(bat, sizeof bat, "BAT CRIT");
-        col = C_ALERT;
-        break;
-    default:            /* HUB_BAT_NONE: no reading, no claim */
-        return;
-    }
-    fb_text(x + w - fb_text_w(bat, 1), y, bat, col, 1);
 }
 
 static void draw_dashboard(const hub_display_state_t *st)
@@ -854,10 +797,10 @@ static void draw_dashboard(const hub_display_state_t *st)
 
         /* The RMS bar sits in the middle of the card, with its number
          * beside it.  The number used to share the bottom row with the
-         * battery, which put three readings on one line and made the
-         * card hard to read at a glance in a dark room; the bar and its
-         * number are a pair, and the link and the battery are another
-         * pair, and each pair has a row of its own.
+         * link, which put two readings on one line and made the card
+         * hard to read at a glance in a dark room; the bar and its
+         * number are a pair, and the link is another pair, and each
+         * pair has a row of its own.
          *
          * The bar carries a notch at the cot's own trigger: the level
          * it sends audio over.  A cot under its notch is only being
@@ -874,9 +817,8 @@ static void draw_dashboard(const hub_display_state_t *st)
         fb_text(CARD_X + CARD_W - 14 - rms_w, y + 26, rms,
                 known ? C_TEXT : C_DIM, 1);
 
-        /* Bottom row: the radio link on the left -- a small network bar
-         * and the RSSI, or "--" when there is no reading -- and the
-         * battery on the right. */
+        /* Bottom row: the radio link -- a small network bar and the
+         * RSSI, or "--" when there is no reading. */
         const int bars = known ? rssi_bars(n->rssi) : 0;
         draw_signal_bars(CARD_X + 14, y + 58, bars);
         char link[24];
@@ -886,9 +828,6 @@ static void draw_dashboard(const hub_display_state_t *st)
             snprintf(link, sizeof link, "LINK %d dBm", (int)n->rssi);
         }
         fb_text(CARD_X + 14 + 4 * 5 + 4, y + 51, link, C_DIM, 1);
-        if (known) {
-            draw_battery(CARD_X + 14, y + 51, CARD_W - 28, n);
-        }
     }
 
     /* ---- the footer ----
@@ -1034,7 +973,6 @@ static void draw_help(void)
         "            -90 and worse is barely there.",
         "            The bars are the same number.",
         "",
-        "BAT 87%      that cot's battery.",
         "CONF 98%     how sure the model was.",
     };
     const int n = (int)(sizeof lines / sizeof lines[0]);
