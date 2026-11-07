@@ -119,8 +119,9 @@ def build():
         'current of any unit, so it is the cell most worth sizing carefully. '
         '<b>Never LiFePO4</b>: the module charges to 4.2 V and an LFP cell tops out at '
         '3.65 V. The <b>divider is a fixed 220 k&#937; / 100 k&#937; pair</b> (x3.2) - '
-        'no potentiometer in the battery path, because it would put up to 4.2 V on a '
-        '3.3 V pin and the firmware cannot read the wiper position.</div>'
+        'no potentiometer in the battery path - a two-terminal pot cannot divide; '
+        'a three-terminal one needs a per-unit ratio and drifts. The 100 nF is '
+        'required.</div>'
     )
     foot = ("GPIO35-37 are the Octal PSRAM bus - never wire them. The TFT "
             "signal wiring is the recorded working one for the existing "

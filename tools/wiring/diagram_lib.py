@@ -201,10 +201,13 @@ class Page:
         The 220 k top resistor and the 100 k / 100 nF shunt pair make a
         fixed x3.2 divider: about 1.31 V at a 4.2 V cell.
 
-        The resistors are deliberately FIXED (D-81): a potentiometer in
-        this path would put up to 4.2 V on a 3.3 V pin at one wiper
-        position, and the firmware cannot read the wiper position, so it
-        would not know the division ratio.
+        The resistors are deliberately FIXED (D-81).  A two-terminal pot
+        in this path cannot divide at all: the ADC pin's only path to
+        ground is its own high-impedance input, so the pin still sees
+        4.2 V.  A three-terminal pot used as a real divider would work,
+        but it would need a per-unit measured ratio and would drift
+        silently - and 1 % of ratio error is already ~10 points of SOC,
+        because BAT_CURVE moves 100 mV = 20 percentage points at 3.8 V.
 
         The routing channel sits at x=248, clear of the module's ground
         symbol at x=225 - a wire through a ground symbol reads as a
