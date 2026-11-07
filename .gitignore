@@ -46,3 +46,6 @@ research/web/.cert/
 research/kaggle_out/*.zip
 research/loudspeech/raw/
 research/loudspeech/*.log
+
+# Arduino/PlatformIO build output kept out of the repository
+firmware/.build/
