@@ -9,14 +9,16 @@
 ```text
   Cot 1: INMP441 → C3  ── ESP-NOW ──┐
   Cot 2: INMP441 → C3  ── ESP-NOW ──┼→ ESP32-S3 hub → 2.8-inch TFT
-  Cot 3: INMP441 → C3  ── ESP-NOW ──┘        │
+                                             │
                                              └── BLE → phone (tested)
-                                                  or → C3 wearable (planned)
+                                                  or → C3 wearable (on the bench)
                                                            ├→ SSD1306 OLED
-                                                           └→ DRV2605L → motor
+                                                           └→ BC547 → haptic motor
 ```
 
 No audio or signal wires connect the cot nodes to the hub: the link is wireless. Each assembly has its own local power and ground. The node, hub and wearable do not need grounds connected to each other.
+
+> **This is the two-cot system.** The three-node version is the sibling repository `fp-2`. The wearable's haptic is a **BC547 low-side switch**, not the DRV2605L the older planning documents describe (D-77).
 
 ## 2. Wiring A — USB-powered bench test
 
@@ -24,7 +26,7 @@ No audio or signal wires connect the cot nodes to the hub: the link is wireless.
 
 ### 2.1 Cot node: ESP32-C3 + INMP441
 
-Repeat the same connections for each node. **Three-node simultaneous operation is now verified:** on 2026-11-04 all three nodes, the hub and the wearable ran on one laptop for twenty-five minutes — the three nodes on a USB hub, the hub and the wearable directly — with **no brownout, no reset and no false alarm** (node 1's own counters: 6 385 frames sent, 0 lost, 0 times the radio had no room).
+Repeat the same connections for each node. **Multi-node operation has been verified** — on 2026-11-04 three nodes, the hub and the wearable ran together on one laptop for twenty-five minutes with **no brownout, no reset and no false alarm** (node 1's own counters: 6 385 frames sent, 0 lost, 0 times the radio had no room). *That session ran three cots; this repository's build is two.*
 
 | From | To | Note |
 |---|---|---|
@@ -77,7 +79,9 @@ No external 100 Ω backlight resistor should be added blindly; use the specific 
 
 ### 2.3 USB wearable bench wiring — proposed, not yet built
 
-The firmware and exact GPIO assignments do not yet exist. The following is a **connection list**, not a tested pin map. Select free C3 I²C pins after checking the actual board, USB and boot-strapping constraints; use the same two bus lines for both modules.
+> **SUPERSEDED — this section describes the DRV2605L option, which is not what was built.** The wearable that is on the bench drives a **real haptic motor through a discrete BC547 low-side switch** (D-77), and the firmware exists and has been verified end to end. **The BC547 wiring is in §5.3 — build from there, not from the table below.** The DRV2605L is retained below only as the record of the alternative that was considered, so the two do not get confused again.
+
+The connection list for the **DRV2605L alternative** — not a tested pin map, and not the design in use:
 
 | From | To | Condition |
 |---|---|---|
@@ -89,13 +93,13 @@ The firmware and exact GPIO assignments do not yet exist. The following is a **c
 | Driver **OUT+ / OUT−** | Compatible motor's two terminals | Use the specific breakout's labels and motor requirements. Do not connect either motor lead to 3V3 or ground as in the old MOSFET circuit. |
 | USB source | C3 USB socket | Supply capability and driver power arrangement must be checked. |
 
-Use the selected breakout's documentation for EN, I/O supply, power, pull-ups and any other control pins; these vary by board. DRV2605L uses an H-bridge, unlike the old low-side MOSFET design. No separate MOSFET or old motor flyback-diode wiring is used for this driver. See [TI DRV2605L datasheet](https://www.ti.com/lit/ds/symlink/drv2605l.pdf). Test firmware is needed before this wearable can receive BLE alerts.
+Use the selected breakout's documentation for EN, I/O supply, power, pull-ups and any other control pins; these vary by board. DRV2605L uses an H-bridge, unlike the old low-side MOSFET design. No separate MOSFET or old motor flyback-diode wiring is used for this driver. See [TI DRV2605L datasheet](https://www.ti.com/lit/ds/symlink/drv2605l.pdf).
 
 ## 3. Wiring B — proposed battery-powered complete system
 
 ### 3.1 Connections that remain the same
 
-For each of the three nodes, retain **all six microphone connections** in section 2.1. For the hub, retain the TFT signal and ground connections in section 2.2. For the wearable, use only a finalised and tested version of section 2.3. Only the **power source** and proposed indicators/battery sensing change; never join all five batteries together.
+For each of the **two** nodes, retain **all six microphone connections** in section 2.1. For the hub, retain the TFT signal and ground connections in section 2.2. For the wearable, use only a finalised and tested version of section 2.3. Only the **power source** and proposed indicators/battery sensing change; never join the four batteries together.
 
 ### 3.2 Power architecture for each separate unit
 
@@ -114,15 +118,19 @@ For each of the three nodes, retain **all six microphone connections** in sectio
 
 **Concrete pad names, from the photographed board (§6):** the charging input is the module's **USB-C socket**; the battery lands on **B+/B−** (printed 电池); the load chain starts at **VO+ / VO−** (printed 输出). IN+/IN− (printed 输入) stay unconnected.
 
-For each of the three nodes and the hub, the BOM proposes a protected 1-cell battery and a 5 V boost if the selected board uses its 5 V input. The wearable's suitable voltage/converter remains undecided. A lithium cell can be **4.2 V fully charged**, so do not connect it to a 3.3 V rail or GPIO; do not apply 5 V to 3V3. The converter's output must remain within the board input specifications under measured peak loads and low cell voltage. A 100 µF bulk capacitor is a **candidate**, not an unconditional connection: confirm location, voltage rating and stability requirements in the actual converter datasheet, then connect + to the intended rail and − to local GND only if appropriate. Do not connect bench USB and a battery supply simultaneously without a designed, verified power path preventing backfeed.
+For each of the **two** nodes and the hub, the BOM proposes a protected 1-cell battery and a 5 V boost if the selected board uses its 5 V input. The wearable's suitable voltage/converter remains undecided. A lithium cell can be **4.2 V fully charged**, so do not connect it to a 3.3 V rail or GPIO; do not apply 5 V to 3V3. The converter's output must remain within the board input specifications under measured peak loads and low cell voltage. A 100 µF bulk capacitor is a **candidate**, not an unconditional connection: confirm location, voltage rating and stability requirements in the actual converter datasheet, then connect + to the intended rail and − to local GND only if appropriate. Do not connect bench USB and a battery supply simultaneously without a designed, verified power path preventing backfeed.
+
+**Cell selection (D-81):** the nodes and the hub take a **protected 18650** (3.7 V nominal, 4.2 V full, 3000 mAh) in a holder; the wearable takes a **1000 mAh Li-Po pouch**. The two are opposite choices for opposite reasons — a node sits on a cot frame within a baby's reach and needs a cell that cannot be punctured, while an 18650 is 18 × 65 mm and 48 g and cannot go on a wrist. **Never an LiFePO4 cell anywhere**: the module charges to 4.2 V and an LFP cell tops out at 3.65 V.
 
 ### 3.3 Node battery voltage measurement and LEDs
 
 Superseded by the concrete plan in §5.1: B+ → 220 kΩ → sense node; sense node → 100 kΩ ∥ 100 nF → B−; sense node → GPIO3 (ADC1_CH3). At 4.2 V the ADC sees ≈ 1.31 V and the divider draws ≈ 13 µA continuously. The status LEDs land on GPIO10 (link, ACK-driven) and GPIO7 (SOC) through 1 kΩ resistors. Firmware for the divider, the LED patterns and the heartbeat ACK is **not yet implemented**; all of it goes to a branch first.
 
+**The divider is a fixed pair, and that is deliberate (D-81).** There is **no potentiometer** in the battery path. A variable resistor was suggested, but it fails on three counts: it would put up to 4.2 V on a pin that accepts 3.3 V; the firmware cannot read the wiper position, so it would not know the division ratio and the reading would drift with heat, vibration and wear; and a linear 3.0 V→4.2 V map would report a quarter-full cell as 58 % charged. Two 1 % resistors give a ratio the firmware knows exactly (**×3.2**), `analogReadMilliVolts()` already applies the chip's factory-calibrated ADC reference, and SOC comes from the curve already in `hub_display.c` (`BAT_CURVE`), printed as `BAT ~80 %` because a voltage-derived figure is an estimate. The bottom of the scale is ~3.3 V, not 3.0 V: 3.0 V is where a protected cell's protection circuit cuts out, which is end-of-life rather than "empty".
+
 ### 3.4 Wearable battery and haptics
 
-The wearable's power follows the same LX-LCBST pattern as the nodes (§5.3): VO+ → switch → SuperMini 5V pin; OLED and DRV2605L VIN from the SuperMini's 3V3 output so the I²C bus stays at 3.3 V; the motor on the DRV2605L's OUT+/OUT−. The proposed 1,000 mAh cell only buys runtime if the module's measured charge current suits it — confirm during bench validation. The IRLML2502 and its gate resistors/diode belong to the alternative MOSFET drive and are **not wired into the DRV2605L path**.
+The wearable's power follows the same LX-LCBST pattern as the nodes (§5.3): VO+ → switch → SuperMini 5V pin; the OLED from the SuperMini's 3V3 output so the I²C bus stays at 3.3 V; the motor driven by the **BC547 low-side switch on GPIO7** (D-77), not by the DRV2605L the older documents describe. The proposed 1,000 mAh **Li-Po pouch** cell only buys runtime if the module's measured charge current suits it — at ~1 A it does not, so the charge current must come down to ~400–500 mA (D-81). The IRLML2502 and its gate resistors/diode belong to the alternative MOSFET drive and are **not wired into the BC547 path**.
 
 ## 4. Checks before power-up
 
@@ -136,7 +144,7 @@ The wearable's power follows the same LX-LCBST pattern as the nodes (§5.3): VO+
 
 This is the proposed design for the next firmware/hardware branch. It deliberately avoids the documented boot-strapping pins and the pins already used by the microphone, TFT or native USB. It is a **pin plan**, not yet flashed or measured.
 
-### 5.1 Cot node — three identical units
+### 5.1 Cot node — two identical units
 
 | Function | GPIO / connection | Components |
 |---|---|---|
@@ -184,19 +192,20 @@ The hub TFT keeps its working assignments (GPIO4 backlight, GPIO10–14 signals)
 
 ### 5.3 Wearable — one unit
 
-The wearable uses the same C3 board class, but the final board must be checked against its pin labels. Proposed non-strapping assignments are:
+The wearable uses the same C3 board class, but the final board must be checked against its pin labels. **This unit is built and working on the bench** — the OLED, the BLE client and the haptic motor are all in place (D-76, D-77). What it does not have yet is its battery, and the rows below are what remains to be built:
 
 | Function | GPIO / connection | Components |
 |---|---|---|
-| Battery ADC | **GPIO3 / ADC1_CH3** | Battery-side divider 220 kΩ / 100 kΩ and 100 nF as above |
-| OLED + DRV2605L SDA | **GPIO5** | Shared I²C SDA; add no external pull-up until both breakout boards are checked |
-| OLED + DRV2605L SCL | **GPIO6** | Shared I²C SCL; pull-ups, if needed, to 3.3 V only |
-| Connection/BLE LED | **GPIO1**, active high | GPIO1 → 1 kΩ → blue LED anode; cathode → GND. It means the wearable has a valid subscribed/connected BLE link, not merely that scanning started. |
-| SOC LED | **GPIO4**, active high | GPIO4 → 1 kΩ → amber/red LED anode; cathode → GND. GPIO4 is a free non-strapping pin on the wearable (no microphone there). |
-| Haptic output | DRV2605L OUT+ / OUT− | Motor connects across the driver's two output terminals; no IRLML2502 or 1N5819 in this path |
+| Battery ADC | **GPIO3 / ADC1_CH3** | The same fixed 220 kΩ / 100 kΩ divider and 100 nF filter as the node (D-81). 1.31 V at a full 4.2 V cell, ~13 µA. |
+| OLED SDA | **GPIO5** | Shared I²C SDA; add no external pull-up until the OLED module's own pull-ups are checked |
+| OLED SCL | **GPIO6** | Shared I²C SCL; pull-ups, if needed, to 3.3 V only |
+| Haptic output | **GPIO7 → 2.2 kΩ → BC547 base** | The low-side switch that is actually fitted: GPIO7 → 2.2 kΩ → base, 100 kΩ base-emitter pulldown, motor in the collector leg, 1N5819 across the motor with the cathode up, emitter → GND, 10 Ω in the motor's + lead. **No IRLML2502 and no DRV2605L in this path** (D-77). |
 | Power switch | **VO+ → switch → C3 5V pin** | Same pattern as the node: disconnects the device, battery stays on B+/B− for charging. |
+| **Status LEDs** | **none** | The wearable has **no status LEDs** (D-76). An earlier revision gave it a blue link LED on GPIO1 and a red SOC LED on GPIO4; neither has firmware, and the OLED already carries LINK/SCAN. The SOC readout belongs on the OLED and needs the GPIO3 divider wired *and* firmware. |
 
-**Wearable power:** the wearable uses the same LX-LCBST pattern as the node: VO+ → switch → the SuperMini's 5V pin, VO− → GND. The OLED and the DRV2605L breakout are powered from the SuperMini's **3V3 output pin** — not from 5 V: the DRV2605L breakout's I²C pull-ups ride on its VIN rail, so 5 V there would push 5 V levels into non-5-V-tolerant C3 GPIOs. Check the board's 3.3 V regulator current budget before final assembly: C3 radio peaks (hundreds of mA) + OLED (~25 mA) + motor bursts (100–200 mA through the DRV2605L) all share it; if it sags or resets during vibration, the motor supply design gets revisited on a branch. ESP32-C3 strapping pins are GPIO0/2/8/9 — the plan above avoids all of them.
+**Wearable power:** the wearable uses the same LX-LCBST pattern as the node: VO+ → switch → the SuperMini's 5V pin, VO− → GND. The OLED is powered from the SuperMini's **3V3 output pin**. Check the board's 3.3 V regulator current budget before final assembly: C3 radio peaks (hundreds of mA) + OLED (~25 mA) + motor bursts (~85 mA) all share it; if it sags or resets during vibration, the motor supply design gets revisited on a branch. ESP32-C3 strapping pins are GPIO0/2/8/9 — the plan above avoids all of them.
+
+**Runtime (D-82):** the chain **cell → boost to 5.1 V → the SuperMini's 5 V pin → its onboard linear regulator → 3.3 V** means the cell supplies roughly **1.8× the 3.3 V load current**, because a linear regulator passes current rather than power. On a 1000 mAh pouch that projects to **about six hours** — a projection, not a measurement. Feeding the SuperMini's **3V3 pin** from a 3.3 V buck-boost would roughly double it; the OLED's always-on ~25 mA is the other lever. The cell is a **1000 mAh Li-Po pouch** (D-81) and the module's ~1 A charger must be reduced to ~400–500 mA for it.
 
 ## 6. LX-LCBST-TC-001: decision and exact conditional wiring
 
@@ -204,7 +213,7 @@ The wearable uses the same C3 board class, but the final board must be checked a
 
 | Pad group | Printed label | Meaning (Chinese on silk) | Use |
 |---|---|---|---|
-| B+ / B− (front) / B+ / B− (back) | 电池 | **battery** | Li-Po cell connects here |
+| B+ / B− (front) / B+ / B− (back) | 电池 | **battery** | The cell connects here — an 18650 on a node or the hub, a Li-Po pouch on the wearable (D-81) |
 | VO+ / VO− (two pairs, back) | 输出 | **output** | Boost output — feeds the power switch |
 | IN+ / IN− (back) | 输入 | **input** | Alternate charging input, 4.2–6.5 V; leave **unconnected** (charging runs from USB-C) |
 | Front − / + pair (unlabelled) | — | ambiguous | Most likely a paralleled output tap; **verify with a meter before use** — compare it against VO+/VO− and B+/B− with the battery installed |
@@ -213,8 +222,8 @@ The wearable uses the same C3 board class, but the final board must be checked a
 No **T** pad is visible on this board — the family listing's T-shorting instructions belong to other variants and **do not apply here**; do not short anything.
 
 ```text
-Li-Po cell +  → B+   (pad printed 电池)
-Li-Po cell −  → B−
+cell +        → B+   (pad printed 电池)   [18650 on nodes/hub, Li-Po pouch on wearable]
+cell −        → B−
 USB-C socket  → charging input (nothing wired to IN+/IN−)
 VO+ → power switch → ESP32 board 5V pin
 VO− → ESP32 board GND pin
@@ -222,7 +231,7 @@ VO− → ESP32 board GND pin
 
 **Set the trimpot before any ESP32 is connected:** battery attached, meter on VO+/VO−, adjust to ≈ 5.1 V. The module can ship set anywhere in its 4.2–28 V range; connecting a board before setting it can destroy the board. Re-check after the first full charge cycle and occasionally thereafter.
 
-Two characteristics remain unknown and must come from the bench validation: the **actual charge current** (the charger's program resistor is too small to read in the photo; if it programmes near 1 A, the wearable's 1,000 mAh cell needs its datasheet to permit that), and the boost converter's **quiescent drain while the unit is switched off** (the switch disconnects the load, not the converter — if off-state drain proves significant, the switch moves or the module changes). Note also that B− and VO− connect through the module's protection FET: in normal operation they are effectively the same ground, but at deep-discharge cutoff the battery disconnects and the ADC reading collapses — acceptable, since that *is* the dead-battery condition.
+Two characteristics remain unknown and must come from the bench validation: the **actual charge current** (the charger's program resistor is too small to read in the photo; if it programmes near 1 A, the wearable's 1,000 mAh pouch needs it reduced to ~400–500 mA, and a node's 3000 mAh 18650 is fine at 1 A), and the boost converter's **quiescent drain while the unit is switched off** (the switch disconnects the load, not the converter — if off-state drain proves significant, the switch moves or the module changes). Note also that B− and VO− connect through the module's protection FET: in normal operation they are effectively the same ground, but at deep-discharge cutoff the battery disconnects and the ADC reading collapses — acceptable, since that *is* the dead-battery condition.
 
 ### Required one-board validation before buying four more
 
@@ -235,10 +244,14 @@ Two characteristics remain unknown and must come from the bench validation: the 
 
 ## 7. SOC display and charge prompt
 
-The hub's display should show an **estimated battery band** rather than falsely precise percentage. The proposed UI is `BAT ~80%`, `BAT LOW — CHARGE SOON`, and `BAT CRITICAL — SWITCH OFF AND CHARGE`. The wearable OLED may show the same. The node has only LEDs: normal SOC LED off, low slow blink, critical fast blink. Use voltage hysteresis and require repeated samples to prevent radio-current dips from causing a false prompt. SOC percentages need a calibration table for the selected Li-Po chemistry and actual cell; they must not be copied blindly from nominal voltage.
+The hub's display should show an **estimated battery band** rather than falsely precise percentage. The proposed UI is `BAT ~80%`, `BAT LOW — CHARGE SOON`, and `BAT CRITICAL — SWITCH OFF AND CHARGE`. The wearable OLED may show the same. The node has only LEDs: normal SOC LED off, low slow blink, critical fast blink. Use voltage hysteresis and require repeated samples to prevent radio-current dips from causing a false prompt. SOC percentages need a calibration table for the selected cell's chemistry; they must not be copied blindly from nominal voltage.
+
+**The map from voltage to percent is a curve, and the bottom is ~3.3 V, not 3.0 V (D-81).** A lithium cell is not linear between 3.0 V and 4.2 V. A representative curve is **4.20 V = 100 %, 4.05 ≈ 90 %, 3.90 ≈ 65 %, 3.80 ≈ 40 %, 3.70 ≈ 20 %, 3.55 ≈ 8 %, 3.45 ≈ 3 %, 3.30 ≈ 0 %**, and that is the table `hub_display.c` already holds as `BAT_CURVE`. A straight line from 3.0 V to 4.2 V would report a genuinely quarter-full cell as "58 %" — wrong across exactly the region the cell spends most of its life, and wrong in the direction that says "fine" when the answer is "not fine". The bottom of the scale is **3.3 V**, because 3.0 V is roughly where a protected cell's protection circuit cuts out: that is end-of-life, not "empty", and the banded warning should arrive well before it. The firmware must never deliberately drive a cell that far.
+
+**Two things make the reading an estimate rather than a measurement.** The cell's terminal voltage **sags under load** — the boost converter and the radio draw current while the ADC samples, dipping the terminal 100–200 mV — so the reading is taken as the average of many samples through the 100 nF filter, and trusted only after it has landed in the expected window repeatedly. And the divider's ratio is known only as well as its resistors (a few per cent), which is why the display bands the result with hysteresis instead of trusting a single sample. The `~` in `BAT ~80%` is doing real work: it tells the caregiver the number is a guide, and it must not be dropped until a real fuel gauge is fitted.
 
 ## 8. What is still required before this counts as verified
 
-The LX-LCBST pad map is now known from the photograph; what remains is bench truth. Build **one** node power assembly exactly as in §5.1/§6, measure charge current, set the trimpot to 5.1 V, confirm switch-off behaviour and off-state drain, then run the working node firmware from it and compare with the USB baseline (reboots, bursts, mic noise). In parallel the user plans a **board swap**: ESP32-C3 Pro Mini boards for the three nodes and the existing SuperMini for the wearable — the firmware targets the chip, not the board, but each Pro Mini must prove native USB, 4 MB flash and the needed pins (GPIO3/4/5/6/7/10) before the swap counts; re-verify one node end to end on a branch. Firmware work (divider read, LED patterns, heartbeat ACK, SOC display) is all new and lives on a branch until verified. No merge into `main` without the user's decision.
+The LX-LCBST pad map is now known from the photograph; what remains is bench truth. Build **one** node power assembly exactly as in §5.1/§6, measure charge current, set the trimpot to 5.1 V, confirm switch-off behaviour and off-state drain, then run the working node firmware from it and compare with the USB baseline (reboots, bursts, mic noise). In parallel the user plans a **board swap**: ESP32-C3 Pro Mini boards for the two nodes and the existing SuperMini for the wearable — the firmware targets the chip, not the board, but each Pro Mini must prove native USB, 4 MB flash and the needed pins (GPIO3/4/5/6/7/10) before the swap counts; re-verify one node end to end on a branch. Firmware work (divider read, LED patterns, heartbeat ACK, SOC display) is all new and lives on a branch until verified. No merge into `main` without the user's decision.
 
 **Evidence:** `firmware/node/node_crynet/node_crynet.ino` (GPIO4/5/6); `firmware/hub_infer/components/hub_display/hub_display.c` (TFT pins); `SYSTEM_UPDATE.md` (working display wiring and hardware tests); `HARDWARE_COMPONENTS.md` (proposed BOM).

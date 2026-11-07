@@ -114,6 +114,13 @@ def build():
         'NODES\' reported cell voltage, not the hub\'s own cell.) The hub\'s '
         'peak current with TFT + radios is unmeasured - confirm the LX-LCBST '
         'holds 5.1 V during bursts before trusting it here.</div>'
+        '<div class="ok"><b>Cell (D-81):</b> an 18650 Li-ion cell, 3.7 V nominal / 4.2 V '
+        'full, 3000 mAh or better, <b>protected</b>, in a holder - the hub draws the most '
+        'current of any unit, so it is the cell most worth sizing carefully. '
+        '<b>Never LiFePO4</b>: the module charges to 4.2 V and an LFP cell tops out at '
+        '3.65 V. The <b>divider is a fixed 220 k&#937; / 100 k&#937; pair</b> (x3.2) - '
+        'no potentiometer in the battery path, because it would put up to 4.2 V on a '
+        '3.3 V pin and the firmware cannot read the wiper position.</div>'
     )
     foot = ("GPIO35-37 are the Octal PSRAM bus - never wire them. The TFT "
             "signal wiring is the recorded working one for the existing "

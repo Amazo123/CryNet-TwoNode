@@ -198,8 +198,13 @@ class Page:
         """Battery-sense divider, drawn in the band below the boards.
 
         (bx, by) is the module's B+ pad; (sx, sy) is the board's ADC pin.
-        The 220 k top resistor and the 100 k / 100 nF shunt pair make the
-        usual 100 k/300 k divider: about 1.31 V at a 4.2 V cell.
+        The 220 k top resistor and the 100 k / 100 nF shunt pair make a
+        fixed x3.2 divider: about 1.31 V at a 4.2 V cell.
+
+        The resistors are deliberately FIXED (D-81): a potentiometer in
+        this path would put up to 4.2 V on a 3.3 V pin at one wiper
+        position, and the firmware cannot read the wiper position, so it
+        would not know the division ratio.
 
         The routing channel sits at x=248, clear of the module's ground
         symbol at x=225 - a wire through a ground symbol reads as a
