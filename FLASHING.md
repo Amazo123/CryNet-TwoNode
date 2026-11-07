@@ -85,10 +85,15 @@ It prints something like this:
 
 == prebuilt images ==
   hub:
-    0x00000000  bootloader.bin      22560 B  0e0b7f3c...  hash OK
-    0x00008000  partitions.bin       3072 B  a1c5...       hash OK
-    0x00010000  firmware.bin     1335248 B  9a79f34e...   hash OK
+    0x000000  bootloader.bin       22560 B  aefe21ad9f40735b...  hash OK
+    0x008000  partitions.bin        3072 B  463793a642ab4a90...  hash OK
+    0x010000  firmware.bin      1335248 B  f7f09a34a7d115cd...  hash OK
   node:
+    0x000000  bootloader.bin       19536 B  9b2fa5e4af7cf282...  hash OK
+    0x008000  partitions.bin        3072 B  148b959cbff1c38a...  hash OK
+    0x00e000  boot_app0.bin         8192 B  f94c5d786a7a8fab...  hash OK
+    0x010000  app.bin             983328 B  aabb406f49335423...  hash OK
+  wearable:
     ...
 ```
 
@@ -156,10 +161,15 @@ node id 1 (derived from the MAC; change it with "id <n>")
 node 1  mac 90:DA:72:85:C5:44
 ```
 
+A node whose id was set by hand says so instead — `node id 2 (saved; the MAC would
+have said 7)` — which is how you know the id in NVS is yours and not the derived
+one.
+
 The wearable answers with its OLED line and then its Bluetooth lines:
 
 ```
 [oled] up
+[ble] hub found (30:30:F9:17:2F:80)
 [ble] connecting to 30:30:F9:17:2F:80
 [ble] hub connected
 [ble] state: 2 cot(s), mask 0x00
@@ -591,3 +601,54 @@ python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15     # 
 ```
 
 — with the ports **verified** by §3 first, not assumed.
+
+---
+
+## 13. The bench card
+
+One page, in the order you actually do it. Print it, or keep it on the screen next
+to the boards.
+
+```
+1. WHAT IS PLUGGED IN
+   python firmware/tools/flash_unit.py --list
+   python firmware/tools/who_is_who.py COM30 COM31 COM32 COM37
+   -> a MAC, not a COM number, is the identity of a board
+
+2. IS THE TOOLCHAIN GOOD
+   python firmware/tools/flash_unit.py --check
+   -> every image hash must say OK; HASH MISMATCH means do not flash
+
+3. BACK UP (before every flash)
+   python firmware/tools/flash_unit.py --role node --port COM31 --backup
+   -> copy the .bin out of %TEMP% somewhere that is not %TEMP%
+
+4. FLASH, HUB FIRST, THEN THE NODES, THEN THE WEARABLE
+   python firmware/tools/flash_unit.py --role hub     --port COM32 --log 25
+   python firmware/tools/flash_unit.py --role node    --port COM31 --log 15
+   python firmware/tools/flash_unit.py --role node    --port COM37 --log 15
+   python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15
+
+5. CHECK THE LOG
+   hub:        "RESULT: PASS - 4 probes", "node 1 is online", "node 2 is online",
+               and NO "bat" field in the link: lines
+   node:       "node 1  mac 90:DA:72:85:C5:44" (id 1) / 90:DA:72:87:CB:98 (id 2)
+   wearable:   "[ble] state: 2 cot(s), mask 0x00"
+
+6. A NEW NODE NEEDS ITS ID SET (115200 baud, over the USB console)
+   id 1        <- the first cot        id 2   <- the second cot
+   -> the hub watches cots 1 and 2 only; a MAC-derived id is usually neither
+
+7. NOTHING COMES UP?  IT IS IN THE BOOTLOADER
+   & "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+       --chip esp32c3 --port COM31 run
+
+8. ROLL BACK
+   & "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+       --chip esp32c3 --port COM31 write-flash 0x0 "$env:TEMP\crynet_backup_node_COM31.bin"
+```
+
+The order in step 4 is not a preference: the new hub reads both the old 34-byte and
+the new 32-byte telemetry, the old hub reads only 34 — so a node must never meet a
+hub that misreads it.
+
