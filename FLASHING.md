@@ -10,6 +10,16 @@ Read it with `SYSTEM_WIRING.md` (what to wire) and `SYSTEM_UPDATE.md` (what has 
 
 ---
 
+> **Have never flashed a chip before? Start with `GETTING_STARTED_FLASHING.md` instead.**
+> It is written for someone who has never opened PlatformIO or the Arduino IDE:
+> where every file is, what a COM port is, and three ways to do the job —
+> double-click a `.bat`, use PlatformIO IDE, or use the Arduino IDE.
+>
+> This file is the **reference**: every option, every escape hatch, the reasoning.
+> The other one is the **walkthrough**.
+
+---
+
 ## 0. What you need
 
 **One program: `esptool`.** That is the whole offline path. It is already on this

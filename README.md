@@ -12,8 +12,12 @@ Training pipeline for the cry detector that runs on the **Central Intelligence H
 |---|---|
 | `notebooks/crynet_training.ipynb` | **The deliverable.** Downloads the corpora, builds the feature set, trains, quantizes to INT8 and exports the firmware artifacts. Run it on Kaggle. |
 | `research/` | The dataset investigation behind the notebook: scripts, corpus analysis, and the C↔Python parity test. |
-| **`FLASHING.md`** | **How to put the firmware on the boards, offline, by yourself.** Identifying which board is on which port, the order to flash them in, what a good boot log looks like, and what to do when a board is left in its bootloader. |
+| **`GETTING_STARTED_FLASHING.md`** | **Start here if you have never flashed anything.** The from-zero walkthrough: where every file is, what a COM port is, how to double-click `flash.bat`, and how PlatformIO IDE and the Arduino IDE each fit in. |
+| **`FLASHING.md`** | **The reference.** Every option, every escape hatch, the reasoning behind the flash offsets. |
 | `firmware/prebuilt/` | **The built flash images** — the hub, the cot node and the wearable, ready to write with `esptool` alone. No compiler, no network. |
+| `firmware/prebuilt/flash.bat` | **Flash a unit by double-clicking it.** You press 1, 2 or 3 and type the port. Backs up first, then writes. |
+| `firmware/prebuilt/watch.bat` | **Watch what a board says** — the Serial Monitor without the Arduino IDE. |
+| `firmware/tools/copy_sketches.bat` | **Copy the node and wearable sketches into the Arduino sketchbook** before building them in the Arduino IDE. |
 | `firmware/tools/flash_unit.py` | **Flash one unit from the prebuilt images:** `python firmware/tools/flash_unit.py --role node --port COM31`. |
 
 ---

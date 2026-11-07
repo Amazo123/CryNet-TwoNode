@@ -1,0 +1,9 @@
+# The batch scripts are run by cmd.exe, which misparses a file with LF-only
+# line endings (a ")" on its own line can end the wrong block, and a
+# multi-line command gets split).  Pin them to CRLF in the repository so
+# they work on a fresh clone whatever the machine's autocrlf setting is.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Everything else stays as it is written.
+* text=auto
