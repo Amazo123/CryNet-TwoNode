@@ -12,6 +12,7 @@ Training pipeline for the cry detector that runs on the **Central Intelligence H
 |---|---|
 | `notebooks/crynet_training.ipynb` | **The deliverable.** Downloads the corpora, builds the feature set, trains, quantizes to INT8 and exports the firmware artifacts. Run it on Kaggle. |
 | `research/` | The dataset investigation behind the notebook: scripts, corpus analysis, and the C↔Python parity test. |
+| **`FLASHING.md`** | **How to put the firmware on the boards.** Identifying which board is on which port, the order to flash them in, what a good boot log looks like, and what to do when a board is left in its bootloader. |
 
 ---
 
