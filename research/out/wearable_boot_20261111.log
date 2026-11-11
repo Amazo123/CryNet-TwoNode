@@ -1,0 +1,14 @@
+watching COM30 at 115200 baud -- Ctrl+C to stop
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xd (SPI_FAST_FLASH_BOOT)
+Saved PC:0x403893cc
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x110c
+load:0x403cbf10,len:0xb54
+load:0x403ce710,len:0x2f9c
+entry 0x403cbf10
+
+CryNet wearable — BLE alert client (stage 2d)
+[oled] up
