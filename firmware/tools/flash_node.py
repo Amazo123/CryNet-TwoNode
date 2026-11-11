@@ -15,12 +15,16 @@ repository may not be checked out.
 
 The wearable is flashed the same way, with `--sketch wearable`: it is
 the same board and the same toolchain, and the two sketches live side by
-side in the repository.
+side in the repository.  `--sketch haptic_test` flashes the bench test for
+the wearable's vibration motor (GPIO7, 3 s on / 2 s off); it is a throwaway
+image -- flash `--sketch wearable` again afterwards to put the real firmware
+back.
 
 Usage:
     python firmware/tools/flash_node.py --port COM38
     python firmware/tools/flash_node.py --port COM38 --dry-run
     python firmware/tools/flash_node.py --port COM30 --sketch wearable
+    python firmware/tools/flash_node.py --port COM30 --sketch haptic_test
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ FQBN = "esp32:esp32:weact_studio_esp32c3"
 SKETCHES = {
     "node": ("node", "node_crynet"),
     "wearable": ("wearable", "wearable_crynet"),
+    "haptic_test": ("wearable", "haptic_test"),
 }
 
 
