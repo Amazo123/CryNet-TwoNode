@@ -1,5 +1,11 @@
 /*
- * CryNet cot node — ESP32-C3 SuperMini + INMP441 I2S microphone.
+ * CryNet cot node — ESP32-C3 Pro Mini + INMP441 I2S microphone.
+ *
+ * The board is the ESP32-C3 Pro Mini (the cot nodes moved off the original
+ * SuperMini prototype on 2026-11-02; the SuperMini went to the wearable).
+ * Nothing here is board-specific: the Pro Mini and the SuperMini are the
+ * same ESP32-C3 chip with the same 4 MB flash and native USB, so the FQBN
+ * weact_studio_esp32c3 covers both and this image is unchanged by the swap.
  *
  * Stage 2b.  The node is deliberately a dumb sensor.  It captures 16 kHz
  * mono PCM, keeps the last two seconds in RAM, reports a 100 ms RMS over
@@ -8,7 +14,7 @@
  * the hub, and the front end on the hub consumes the exact same PCM bytes
  * this node sends (the frozen signal contract).
  *
- * Wiring — INMP441 to ESP32-C3 SuperMini:
+ * Wiring — INMP441 to ESP32-C3 Pro Mini (GPIO4/5/6 on either board):
  *     VCC -> 3V3        GND -> GND        L/R -> GND   (left channel)
  *     SCK -> GPIO4      WS  -> GPIO5      SD  -> GPIO6
  *
@@ -347,7 +353,7 @@ static uint32_t  g_requests = 0;
 static uint32_t  g_heartbeats = 0;
 
 /* The hub's signal as the node hears it: the RSSI of the last frame the
- * hub sent.  Its heartbeat arrives every 100 ms, so this is a live
+ * hub sent.  Its heartbeat arrives every 1000 ms, so this is a live
  * reading, and it is the node's own view of the link -- the mirror of
  * the reading the hub takes of the node's telemetry.  Zero means no hub
  * frame has been heard yet. */
@@ -810,8 +816,8 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
      * for nothing, so the node's window is left alone. */
     /* Learn the hub's address from any frame it sends — requests and
      * heartbeats both — and add it as a peer so the reply can be
-     * unicast to it.  The heartbeat arrives every 100 ms, so the
-     * address is learned within a tenth of a second of boot; waiting
+     * unicast to it.  The heartbeat arrives every 1000 ms, so the
+     * address is learned within about a second of boot; waiting
      * for a request meant that a hub which had already heard the node
      * (and so had stopped probing) never told the node where to send. */
     if (!g_hub_known && !g_hub_peer_pending && info != NULL &&

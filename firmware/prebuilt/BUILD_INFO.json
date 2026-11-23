@@ -99,11 +99,11 @@
       ],
       "extras": [],
       "files": {
-        "firmware/node/node_crynet/node_crynet.ino": "7f26280abd194e962dd94819ef05e705f4d52623b3f8469775776c58c084a748"
+        "firmware/node/node_crynet/node_crynet.ino": "1d9dacf11a042d5ba1545dbfc6848c78d9cdf07b4980617bad13daa302bc80ae"
       },
-      "source_fingerprint": "a715bd57edc46a8a7deed56807bb648daa056059c134d5afaf4739037b2c7ef7",
+      "source_fingerprint": "b3c0f42bc4cbdc7d594ab969598cd8e9cdf39195f8890faabe481fc40f5a6813",
       "images": {
-        "app.bin": "aabb406f49335423ce75ab6bf159e17be110b912da6bcf7475a51cf915eea371",
+        "app.bin": "32e19c4aa6c614d30d3f1cd90c34040c690d30bc4e7683ac157828258c1c2b24",
         "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
         "bootloader.bin": "9b2fa5e4af7cf282b2db5ed726b26bcca0aec7946eb3fdacc14444195ba754b3",
         "partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1"
