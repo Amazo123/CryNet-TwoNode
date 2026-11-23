@@ -20,7 +20,7 @@ Two ESP32-C3 microphone nodes transmit audio via ESP-NOW to an ESP32-S3 hub. The
 
 | Item | Per node | System total | Specification and purchasing guidance |
 |---|---:|---:|---|
-| ESP32-C3 node board | 1 | **2** | Working prototype uses an ESP32-C3 SuperMini; planned production boards are the user's ESP32-C3 **Pro Mini** stock (verify native USB, 4 MB flash and the GPIO3/4/5/6/7/10 pins on the actual board). The radio is built in. |
+| ESP32-C3 node board | 1 | **2** | **Both cots run an ESP32-C3 Pro Mini.** The swap off the original SuperMini prototype was **made and verified live on 2026-11-02** (native USB `303A:1001`, 4 MB flash, same firmware unchanged, two cry plays → two alerts); the two boards on the bench are `90:DA:72:85:C5:44` (id 1) and `90:DA:72:87:CB:98` (id 2). The existing SuperMini moved to the wearable. The radio is built in. |
 | INMP441 digital I²S microphone breakout | 1 | **2** | Use a 3.3 V-compatible INMP441 breakout. Keep the acoustic opening unobstructed. |
 | USB data/power cable | 1 | **2** | Match the board connector; data-capable cables support programming. Existing cables can be shared for programming if both nodes are otherwise powered. |
 | Regulated 5 V USB supply | 1 | **2** | One per simultaneously operating node, or an adequately rated multiport supply. Use a reputable supply with current headroom; verify connector and board power input. |

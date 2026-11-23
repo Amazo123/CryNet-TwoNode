@@ -18,7 +18,7 @@ hub's front end consumes exactly the PCM bytes this node sends.
 
 The INMP441 is a 3.3 V part — do not put it on 5 V.
 
-| INMP441 | ESP32-C3 SuperMini | Note |
+| INMP441 | ESP32-C3 Pro Mini | Note |
 |---|---|---|
 | `VCC` | `3V3` | 3.3 V only |
 | `GND` | `GND` | |
@@ -76,9 +76,11 @@ This copies both sketches into the Arduino sketchbook
 the Arduino IDE:
 
 1. **File → Open** → `node_crynet` (or `node_capture`).
-2. **Tools → Board → WeAct Studio ESP32C3** — this is the exact board
-   (the ESP32-C3 SuperMini) and its entry already has the right flash
-   size and the right USB settings.
+2. **Tools → Board → WeAct Studio ESP32C3** — the entry targets the
+   **ESP32-C3 chip**, not one board: it has the right flash size and the
+   right USB settings for both the **Pro Mini** the cots use and the
+   SuperMini on the wrist. The firmware is board-agnostic; only the
+   silkscreen pin labels differ.
 3. **Tools → Port** → the node's port. It enumerates as
    `USB Serial Device (COM30)`, VID:PID `303a:1001`.
 4. **Tools → Upload**.

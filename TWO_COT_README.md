@@ -57,7 +57,7 @@ the hub is there — and the node prints the same fact on its serial console
 | Unit | Notes |
 |---|---|
 | Hub | ESP32-S3 DevKitC-1, N16R8. TFT on GPIO10–14, backlight on GPIO4 |
-| Cot nodes | ESP32-C3 SuperMini × 2, INMP441 on GPIO4/5/6. **Node ids 1 and 2** |
+| Cot nodes | ESP32-C3 **Pro Mini** × 2, INMP441 on GPIO4/5/6. **Node ids 1 and 2** |
 | Wearable | ESP32-C3 SuperMini, SSD1306 OLED, BLE to the hub |
 
 The node ids matter now: set them over the node's serial console with
