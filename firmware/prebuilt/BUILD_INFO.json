@@ -115,11 +115,11 @@
       ],
       "extras": [],
       "files": {
-        "firmware/wearable/wearable_crynet/wearable_crynet.ino": "4fdc0e51714446f1cbebd72d0a28f0473ff4fafd122962869a1effa5202e2559"
+        "firmware/wearable/wearable_crynet/wearable_crynet.ino": "6b7e7c10def7e4fa6df84747e0fb4837659eeaf912f10187c4f97605dc98596d"
       },
-      "source_fingerprint": "7071ab878821afe3f65d6c9b79ea28f1b340f0dbecb66d094c050ab6004e5de3",
+      "source_fingerprint": "7d2d3e53ab8f8390a8f6861e26a4a5d8caa30ebacc7d610c1d010aa3355b9826",
       "images": {
-        "app.bin": "193cdaaf12899ea855ae43e6c8712fca81c403d273dfc43f15ca1991b13bda2a",
+        "app.bin": "bfcf93382084823087ae3875ef098790a1f1db89e46c33ee946703632567e247",
         "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
         "bootloader.bin": "9b2fa5e4af7cf282b2db5ed726b26bcca0aec7946eb3fdacc14444195ba754b3",
         "partitions.bin": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1"
