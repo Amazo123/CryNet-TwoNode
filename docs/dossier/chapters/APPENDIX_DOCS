@@ -1,0 +1,22 @@
+# The decision and issue record
+DECISIONS.md
+# The handoff briefing (frozen contracts, file map, versions)
+PROJECT_HANDOFF.md
+# The living status log
+SYSTEM_UPDATE.md
+# Hardware
+SYSTEM_WIRING.md
+HARDWARE_COMPONENTS.md
+# Bench procedure
+DEMO_RUNBOOK.md
+research/CONFUSION_SESSION.md
+# Entry points
+README.md
+TWO_COT_README.md
+firmware/README.md
+firmware/node/README.md
+research/README.md
+# Flashing, including the offline route
+FLASHING.md
+GETTING_STARTED_FLASHING.md
+firmware/prebuilt/README.md
