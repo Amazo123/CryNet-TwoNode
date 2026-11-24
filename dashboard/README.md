@@ -208,6 +208,17 @@ cd dashboard
 npx wrangler deploy        # see dashboard/worker/README.md for the full steps
 ```
 
+**It is live**, on the account's `amazingadelowo` subdomain:
+
+```
+https://amazings-crynet.amazingadelowo.workers.dev
+```
+
+The caregiver opens that address and logs in with the name `caregiver`
+and the dashboard password; the hub posts to it with the hub's own
+upload token. Both secrets are Cloudflare Worker secrets — they are not
+in this repository, and they are not the same secret.
+
 Two things differ from the local copy, both because it is on the public
 internet:
 
