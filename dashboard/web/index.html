@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>CryNet — the cry record</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand"><span class="mark" aria-hidden="true"></span>CryNet<span class="sub">the cry record</span></div>
+    <div class="hubmeta" id="hubmeta"></div>
+    <div class="conn" id="conn" data-state="loading" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span><span id="conn-text">Connecting</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button class="tab" id="tab-overview" role="tab" aria-selected="true" aria-controls="view-overview" type="button">Overview</button>
+    <button class="tab" id="tab-patterns" role="tab" aria-selected="false" aria-controls="view-patterns" type="button">Patterns</button>
+  </nav>
+
+  <div class="controls">
+    <div class="control">
+      <span class="control-label" id="range-label">Range</span>
+      <div class="segmented" id="range" role="group" aria-labelledby="range-label">
+        <button type="button" data-days="7" aria-pressed="false">7 days</button>
+        <button type="button" data-days="14" aria-pressed="true">14 days</button>
+        <button type="button" data-days="30" aria-pressed="false">30 days</button>
+        <button type="button" data-days="90" aria-pressed="false">90 days</button>
+      </div>
+    </div>
+    <div class="control">
+      <label for="cot">Cot</label>
+      <select id="cot"><option value="0">All cots</option></select>
+    </div>
+    <div class="control" id="device-control" hidden>
+      <label for="device">Hub</label>
+      <select id="device"><option value="">All hubs</option></select>
+    </div>
+  </div>
+
+  <p class="scope-note" id="scope-note" hidden></p>
+
+  <main>
+    <section id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="-1">
+      <div class="empty" id="empty-overview" hidden>
+        <svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true">
+          <rect x="8" y="22" width="56" height="24" rx="6" fill="none" stroke="#c3c2b7" stroke-width="2"/>
+          <path d="M18 22V14M30 22V14M42 22V14M54 22V14" stroke="#e1e0d9" stroke-width="2" stroke-linecap="round"/>
+          <path d="M14 46v6M58 46v6" stroke="#c3c2b7" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="36" cy="34" r="4" fill="#cde2fb"/>
+        </svg>
+        <h2>Nothing has been uploaded yet</h2>
+        <p id="empty-overview-detail">The hub has not sent any cry records to this dashboard. Once it reaches the network it uploads what it has stored, and the record appears here.</p>
+        <p>Everything the hub hears is kept on the hub itself until then — nothing is lost.</p>
+      </div>
+      <div id="overview-body" hidden>
+        <div class="kpis" id="kpis"></div>
+        <p class="card-note" id="untimed-note" hidden></p>
+        <div class="system-strip" id="system-strip" hidden></div>
+        <div class="grid" id="overview-grid"></div>
+      </div>
+    </section>
+
+    <section id="view-patterns" role="tabpanel" aria-labelledby="tab-patterns" tabindex="-1" hidden>
+      <div class="empty" id="empty-patterns" hidden>
+        <svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true">
+          <path d="M10 42h52" stroke="#c3c2b7" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18 42V30M30 42V34M42 42V26M54 42V36" stroke="#e1e0d9" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <h2>No patterns to show yet</h2>
+        <p>Patterns need a few recorded cries. When the hub uploads its first episodes, the durations, the nights and the gaps between cries appear here.</p>
+      </div>
+      <div id="patterns-body" hidden>
+        <p class="scope-note" id="patterns-scope" hidden></p>
+        <div class="grid" id="patterns-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span id="footer-range"></span>
+    <span id="footer-updated"></span>
+    <span>Times are shown in this device's own time zone.</span>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
