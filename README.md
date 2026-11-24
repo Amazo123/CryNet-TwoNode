@@ -20,6 +20,8 @@ Training pipeline for the cry detector that runs on the **Central Intelligence H
 | `firmware/tools/copy_sketches.bat` | **Copy the node and wearable sketches into the Arduino sketchbook** before building them in the Arduino IDE. Only needed when you have *changed* the code. |
 | `firmware/tools/flash_unit.py` | **Flash one unit from the prebuilt images:** `python firmware/tools/flash_unit.py --role node --port COM31`. |
 | `firmware/tools/check_prebuilt.py` | **Check that the offline images are up to date with the source** — and say which file moved if they are not. |
+| **`dashboard/`** | **The cry record — the caregiver's dashboard.** The hub writes every cry to its own flash and uploads it here when it has the network. `python dashboard/server.py` and it runs: Python's standard library and one SQLite file, no packages, no build step. Start here: **`dashboard/README.md`**. |
+| `firmware/tools/test_dashboard_contract.py` | **Prove the hub and the dashboard agree** without any hardware: it builds the hub's upload body byte for byte, posts it, and checks what comes back. |
 
 ---
 

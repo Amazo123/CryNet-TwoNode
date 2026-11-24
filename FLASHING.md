@@ -626,6 +626,115 @@ the boost converters are exactly as they were.
 
 ---
 
+## 11a. The cry record and the dashboard — hub only
+
+Since **D-87** the hub keeps a record of every cry in its own flash and, when it
+has the network, uploads it to a dashboard the caregiver can read. **Only the hub
+changed.** The nodes and the wearable do not need reflashing for this, and the
+wearable's alert face is exactly as it was — except that the number it prints
+("event #1042") is now the same number the dashboard holds for that cry.
+
+**Reflash the hub** with the same command as ever:
+
+```powershell
+python firmware/tools/flash_unit.py --role hub --port COM32 --log 25
+```
+
+Two new lines in the boot log say the record is alive:
+
+```
+I (xxxx) crylog: storage mounted: 0 of 6291456 bytes used
+I (xxxx) crylog: boot 1: 0 records kept, 0 still to send, next number 1
+I (xxxx) crynet: hub-7c9ebd12 ready: network "Amazyn", dashboard (not set -- log only)
+```
+
+If instead you see *"the cry log could not be opened"*, the hub carries on and
+still buzzes the wrist — it just keeps no record. Nothing else is affected.
+
+After that, every cry writes **two** more lines — one when the episode opens and
+one when it closes:
+
+```
+I (xxxx) crylog: record 42: the number was made durable in 37 ms
+I (xxxx) crylog: record 42: written in 12 ms
+```
+
+These are the cheapest possible proof that the record is being kept, and the
+millisecond figures are the real cost of the write on your hub's flash — the
+number is measured on the board, not estimated (D-93). A write that took more
+than a second would be worth mentioning on the mailing list; tens of
+milliseconds is normal.
+
+### The one command that proves the log keeps every cry
+
+Type this on the hub's serial console:
+
+```
+logtest
+```
+
+It answers:
+
+```
+logtest: PASS -- a cry that finishes out of order is still sent
+```
+
+**What it is checking, and why it matters.** Two cots crying at once is the
+awkward case: the first cry to start holds the lower number but can still be
+running when the second one ends, so the file of records is *not* in number
+order. An uploader that searched the file as if it were sorted would skip the
+record it stepped over — that cry would never reach the dashboard, and the hub
+would say it had sent everything (D-94). The test runs that exact scenario
+against the real component on your hub, **on its own scratch file** — your real
+log and your real counters are not touched, not even for a moment — and puts
+everything back afterwards.
+
+If it ever answers `FAIL`, do not trust the dashboard's record until it is
+looked at: type `log` and compare the numbers it reports with the records on
+the dashboard.
+
+### The three things to do once
+
+1. **Set the router's 2.4 GHz channel to 6.** Not optional. The cots talk ESP-NOW
+   on channel 6 and the hub has one radio; on any other channel the hub
+   deliberately drops the Wi-Fi to keep the cots audible. Full explanation in
+   [`dashboard/README.md`](dashboard/README.md) §2.
+
+2. **Start the dashboard** on a machine on that network:
+
+   ```powershell
+   python dashboard/server.py
+   ```
+
+   It prints the exact line for step 3.
+
+3. **Tell the hub where it is**, on the hub's serial console:
+
+   ```
+   net set http://192.168.1.50:8787/api/v1/events
+   ```
+
+   Then `net` to check and `upload` to send now. The setting is stored in NVS and
+   **survives a reflash** — you type it once, not every time.
+
+The hub is already built with the Wi-Fi name and password, so it joins on boot. To
+change them: `net ssid <name> <password>`. **The password is plaintext in the
+source** (`components/crynet_net/crynet_net.c`); that is the deliberate trade for a
+hub that works out of the box (D-92).
+
+### What must not change
+
+The monitor is unchanged. With no Wi-Fi, a wrong password, or the dashboard
+switched off, the hub hears a cry and buzzes the wrist exactly as before, and keeps
+the record in its flash until a network appears. **Verify this after flashing:**
+turn the router off, raise a test alert with `alert 1`, and confirm the wrist still
+buzzes. Then `log` should show the record waiting.
+
+The full command list and the troubleshooting are in
+[`dashboard/README.md`](dashboard/README.md).
+
+---
+
 ## 12. The one-line version
 
 ```powershell
