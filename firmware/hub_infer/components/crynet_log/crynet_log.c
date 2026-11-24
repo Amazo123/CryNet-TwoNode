@@ -103,6 +103,48 @@ static log_meta_t        s_meta;
 static open_slot_t       s_open[OPEN_SLOTS];
 
 /* ---------------------------------------------------------------- */
+/* Opening a file that may not be there yet.                         */
+/* ---------------------------------------------------------------- */
+
+/* ESP-IDF's VFS only honours O_CREAT when it arrives with O_EXCL or
+ * O_TRUNC (see spiffs_mode_conv in esp_spiffs.c): a plain O_CREAT is
+ * dropped on the way down, and the open then fails with ENOENT on a
+ * file that does not exist.  On a board whose storage was just
+ * formatted -- which is every brand-new board, flashed from scratch --
+ * that meant the hub could not create its own log, and it went on
+ * running with no record at all.  So: create it with O_EXCL, and fall
+ * back to a plain open when it is already there. */
+static int open_create_if_missing(const char *path, int flags)
+{
+    int fd = open(path, flags | O_CREAT | O_EXCL, 0644);
+    if (fd >= 0 || errno != EEXIST) {
+        return fd;
+    }
+    return open(path, flags, 0644);
+}
+
+/* SPIFFS has neither pread nor pwrite: the VFS answers both with
+ * "function not implemented".  A read at an offset is a seek and a
+ * read, and a write at an offset is a seek and a write.  The log is
+ * the one place this matters, because every record is read back by
+ * number and the counters are rewritten in place. */
+static bool read_at(int fd, void *buf, size_t n, off_t off)
+{
+    if (lseek(fd, off, SEEK_SET) != off) {
+        return false;
+    }
+    return read(fd, buf, n) == (ssize_t)n;
+}
+
+static bool write_at(int fd, const void *buf, size_t n, off_t off)
+{
+    if (lseek(fd, off, SEEK_SET) != off) {
+        return false;
+    }
+    return write(fd, buf, n) == (ssize_t)n;
+}
+
+/* ---------------------------------------------------------------- */
 /* The file, with the lock already held.                            */
 
 static uint32_t count_locked(void)
@@ -120,7 +162,7 @@ static uint32_t count_locked(void)
 static bool read_at_locked(uint32_t index, crynet_log_event_t *out)
 {
     const off_t off = (off_t)(HEADER_SIZE + index * REC_SIZE);
-    return pread(s_fd, out, REC_SIZE, off) == (ssize_t)REC_SIZE;
+    return read_at(s_fd, out, REC_SIZE, off);
 }
 
 static bool save_meta_locked(void)
@@ -130,12 +172,12 @@ static bool save_meta_locked(void)
      * thirty-two bytes where they already are.  The counters file is
      * written on the path between a cot's microphone and the
      * caregiver's wrist, so what it costs is worth counting. */
-    const int fd = open(s_meta_path, O_WRONLY | O_CREAT, 0644);
+    const int fd = open_create_if_missing(s_meta_path, O_WRONLY);
     if (fd < 0) {
         ESP_LOGE(TAG, "cannot write the counters: %s", strerror(errno));
         return false;
     }
-    bool ok = pwrite(fd, &s_meta, sizeof(s_meta), 0) == (ssize_t)sizeof(s_meta);
+    bool ok = write_at(fd, &s_meta, sizeof(s_meta), 0);
     if (ok && ftruncate(fd, (off_t)sizeof(s_meta)) != 0) {
         ok = false;
     }
@@ -155,7 +197,7 @@ static bool open_events_locked(void)
         close(s_fd);
         s_fd = -1;
     }
-    s_fd = open(EVENTS_PATH, O_RDWR | O_CREAT, 0644);
+    s_fd = open_create_if_missing(EVENTS_PATH, O_RDWR);
     if (s_fd < 0) {
         ESP_LOGE(TAG, "cannot open the log: %s", strerror(errno));
         return false;
@@ -177,7 +219,7 @@ static bool open_events_locked(void)
     }
 
     uint32_t head[4] = { 0, 0, 0, 0 };
-    if (pread(s_fd, head, HEADER_SIZE, 0) != (ssize_t)HEADER_SIZE ||
+    if (!read_at(s_fd, head, HEADER_SIZE, 0) ||
         head[0] != EVENTS_MAGIC || head[2] != REC_SIZE) {
         /* Not a log we wrote, or one from a format we no longer read.
          * Start again rather than append nonsense to it.  The record
@@ -301,8 +343,7 @@ static pending_t collect_locked(uint32_t after, crynet_log_event_t *out,
             take = SCAN_RECORDS;
         }
         const off_t off = (off_t)(HEADER_SIZE + i * REC_SIZE);
-        if (pread(s_fd, s_scan, take * REC_SIZE, off) !=
-            (ssize_t)(take * REC_SIZE)) {
+        if (!read_at(s_fd, s_scan, take * REC_SIZE, off)) {
             /* A short read: the flash is failing, or the file changed
              * under us.  Stop rather than guess. */
             ESP_LOGE(TAG, "the log could not be read at record %lu",
@@ -460,6 +501,37 @@ bool crynet_log_init(void)
         esp_vfs_spiffs_unregister("storage");
         return false;
     }
+
+    /* The counters file and the records file can fall out of step: a
+     * power cut between writing a record and writing the counters leaves
+     * the file holding a record whose number the counters have not
+     * caught up with, and the next number handed out would be handed out
+     * twice.  The numbers in the file are the truth, so the highest
+     * number in the tail of the file sets the next one.  The tail is
+     * enough: numbers only ever grow, and the file is written in the
+     * order the records finished, so the highest one is at the end (a
+     * cry that is still being measured holds its number, and there are
+     * at most eight of those open at once). */
+    const uint32_t held = count_locked();
+    const uint32_t look = held < SCAN_RECORDS ? held : SCAN_RECORDS;
+    uint32_t highest = 0;
+    if (look > 0) {
+        const off_t off = (off_t)(HEADER_SIZE + (held - look) * REC_SIZE);
+        if (read_at(s_fd, s_scan, look * REC_SIZE, off)) {
+            for (uint32_t j = 0; j < look; j++) {
+                if (s_scan[j].seq > highest) {
+                    highest = s_scan[j].seq;
+                }
+            }
+        }
+    }
+    if (highest + 1 > s_meta.next_seq) {
+        ESP_LOGW(TAG, "the counters said the next number is %lu but the log "
+                      "holds %lu; taking the log's word",
+                 (unsigned long)s_meta.next_seq, (unsigned long)highest);
+        s_meta.next_seq = highest + 1;
+    }
+
     save_meta_locked();
 
     const uint32_t n = count_locked();
@@ -824,7 +896,7 @@ void crynet_log_trim(void)
             take = COPY_CHUNK;
         }
         const off_t off = (off_t)(HEADER_SIZE + (from + done) * REC_SIZE);
-        if (pread(s_fd, buf, take * REC_SIZE, off) != (ssize_t)(take * REC_SIZE)) {
+        if (!read_at(s_fd, buf, take * REC_SIZE, off)) {
             ok = false;
             break;
         }

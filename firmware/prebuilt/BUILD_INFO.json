@@ -53,7 +53,7 @@
         "firmware/hub_infer/components/crynet_infer/crynet_infer.cpp": "8c43793017a8b43223d2cf33c5c7a2deeb52f9018c51a34333d97f866cf8a0bc",
         "firmware/hub_infer/components/crynet_infer/include/crynet_infer.h": "327569c3e86f984792f9a84c20020a5b2d75b97218f2fb9b2b2fb75cd71c8085",
         "firmware/hub_infer/components/crynet_log/CMakeLists.txt": "cabe69915f12209b7d1517661aebb745dc0903b6a5509aaa1c0f00398a9fa995",
-        "firmware/hub_infer/components/crynet_log/crynet_log.c": "6cf01e1cce07ed2c333748ad0fc2d4c6c2cf0e3fc5369d223abbd2579070a0f4",
+        "firmware/hub_infer/components/crynet_log/crynet_log.c": "0e304e1791f45b07a84d7067d882d5d0de36fccff0e36247b7fce100b3cef48f",
         "firmware/hub_infer/components/crynet_log/include/crynet_log.h": "0bd994ddb935d5bc4715bc47c8a16e9b81be81f549dee349fa401dd357cee8ac",
         "firmware/hub_infer/components/crynet_model/CMakeLists.txt": "c7a06a20aa984828d37f47db247a8b5790d89167a940a12ea1b3a27a183b7737",
         "firmware/hub_infer/components/crynet_model/crynet_model.c": "20491354debf62d427e33289e1e6d5a2a80fe64ec8722c317a8f75ce6bff3d0f",
@@ -95,10 +95,10 @@
         "firmware/tools/fetch_deps.sh": "41143522bc5ac4f50559dcd21444fdc56b5a15dd16e942b3600d69da705b3a42",
         "firmware/tools/patch_deps.py": "16560caf7c506e8d27115644a52e3812335ec448adee3c6afca513fe29f22f6c"
       },
-      "source_fingerprint": "a01a2cbdc8931cc98c6570e42763696c00cacc2c66795beb2328b32a45e03af2",
+      "source_fingerprint": "b0bb250e27c0bc7d053c1c74644e181a55532973f8ca25dd1a1bc570439edfe3",
       "images": {
         "bootloader.bin": "aefe21ad9f40735b7ebc07c2b6ad3eeb440477baed575bfc205f78a043c6282e",
-        "firmware.bin": "2390378945d90b52c52a944e758b9ea692cd70dd3f92a3f0fe0cd6a3549e98b8",
+        "firmware.bin": "368bde7b3258d48b3f7bba51971131a8bcc3d82e39a2c456423118b71393a8e3",
         "partitions.bin": "463793a642ab4a905bd6b4c0b07c749d4ba199ef459b0a91450ca21c0cd581d4"
       }
     },
