@@ -67,3 +67,6 @@ dashboard/data/
 dashboard/*.db
 dashboard/*.db-wal
 dashboard/*.db-shm
+
+# Cloudflare Wrangler local state (local D1 copy and build cache)
+dashboard/.wrangler/

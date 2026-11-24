@@ -259,7 +259,14 @@
 
   /* --------------------------------------------------------------- fetch */
 
+  /* Days, hours and nights are bucketed on the server, and the server may
+     not be in the caregiver's timezone (the hosted copy runs in UTC), so
+     every request says which zone the numbers should be counted in. */
+  var TZ = '';
+  try { TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* keep '' */ }
+
   function getJSON(path) {
+    if (TZ) path += (path.indexOf('?') >= 0 ? '&' : '?') + 'tz=' + encodeURIComponent(TZ);
     return fetch(API + path, { cache: 'no-store', credentials: 'same-origin' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);

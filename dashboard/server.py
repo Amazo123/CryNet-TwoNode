@@ -46,6 +46,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:                                  # Python < 3.9
+    ZoneInfo = None
+
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
 
@@ -255,7 +260,26 @@ def _float_or_none(v):
 # analytics
 # --------------------------------------------------------------------------
 
-def night_key(ts: int) -> str:
+def make_local(tz: str = ""):
+    """Turn epoch seconds into a datetime in the caregiver's timezone.
+
+    The page sends its zone with every request (web/app.js) because the
+    hosted copy of this service runs in UTC and the caregiver does not.
+    An unknown or missing zone falls back to this machine's local time,
+    which is what the service has always done when it ran on the
+    caregiver's own computer.
+    """
+    if tz and ZoneInfo is not None:
+        try:
+            zone = ZoneInfo(tz)
+        except Exception:
+            zone = None
+        if zone is not None:
+            return lambda ts: datetime.fromtimestamp(ts, zone)
+    return datetime.fromtimestamp
+
+
+def night_key(ts: int, lt=make_local()) -> str:
     """The night a timestamp belongs to.
 
     A cry at 02:00 on the 12th happened during the night of the 11th --
@@ -263,7 +287,7 @@ def night_key(ts: int) -> str:
     is named by the day it started.  That is how a caregiver counts a
     night, and it is the only way the numbers add up.
     """
-    d = datetime.fromtimestamp(ts)
+    d = lt(ts)
     if d.hour >= NIGHT_START_HOUR:
         return d.date().isoformat()
     if d.hour < NIGHT_END_HOUR:
@@ -271,12 +295,13 @@ def night_key(ts: int) -> str:
     return d.date().isoformat()
 
 
-def local_date(ts: int) -> str:
-    return datetime.fromtimestamp(ts).date().isoformat()
+def local_date(ts: int, lt=make_local()) -> str:
+    return lt(ts).date().isoformat()
 
 
-def build_summary(store: Store, days: int, cot: int = 0) -> dict:
+def build_summary(store: Store, days: int, cot: int = 0, tz: str = "") -> dict:
     """The numbers and the series the dashboard draws."""
+    lt = make_local(tz)
     now = int(time.time())
     since = now - days * 86400
     events = store.events(since=since, until=now + 86400, cot=cot,
@@ -317,9 +342,9 @@ def build_summary(store: Store, days: int, cot: int = 0) -> dict:
             untimed += 1
             continue
         bucket["last_at"] = max(bucket["last_at"], ts)
-        local = datetime.fromtimestamp(ts)
+        local = lt(ts)
 
-        day = per_day.setdefault(local_date(ts), {"day": local_date(ts),
+        day = per_day.setdefault(local_date(ts, lt), {"day": local_date(ts, lt),
                                                   "cries": 0, "seconds": 0,
                                                   "cots": set()})
         day["cries"] += 1
@@ -331,7 +356,7 @@ def build_summary(store: Store, days: int, cot: int = 0) -> dict:
         per_hour_s[local.hour] += dur
         per_weekday[local.weekday()] += 1
 
-        nk = night_key(ts)
+        nk = night_key(ts, lt)
         night = nights.setdefault(nk, {"night": nk, "cries": 0, "seconds": 0,
                                        "cots": set()})
         night["cries"] += 1
@@ -416,8 +441,9 @@ def build_summary(store: Store, days: int, cot: int = 0) -> dict:
     }
 
 
-def build_analytics(store: Store, days: int) -> dict:
+def build_analytics(store: Store, days: int, tz: str = "") -> dict:
     """The patterns: distributions, gaps, nights, and what they mean."""
+    lt = make_local(tz)
     now = int(time.time())
     since = now - days * 86400
     events = [e for e in store.all_cry_events(since=since, until=now + 86400)
@@ -444,7 +470,7 @@ def build_analytics(store: Store, days: int) -> dict:
 
     nights: dict[str, list[dict]] = {}
     for e in events:
-        nights.setdefault(night_key(int(e["start_at"])), []).append(e)
+        nights.setdefault(night_key(int(e["start_at"]), lt), []).append(e)
 
     # The hour each cot is most often heard in, and how sharp that peak
     # is -- a caregiver wants to know "cot 2 always wakes at 03:00".
@@ -453,7 +479,7 @@ def build_analytics(store: Store, days: int) -> dict:
         sub = [e for e in events if int(e["cot"] or 0) == e_cot]
         by_hour = [0] * 24
         for e in sub:
-            by_hour[datetime.fromtimestamp(int(e["start_at"])).hour] += 1
+            by_hour[lt(int(e["start_at"])).hour] += 1
         peak_hour = max(range(24), key=lambda h: by_hour[h])
         total = sum(by_hour)
         share = round(100.0 * by_hour[peak_hour] / total, 1) if total else 0
@@ -470,9 +496,9 @@ def build_analytics(store: Store, days: int) -> dict:
             "peak_hour": peak_hour,
             "peak_share": share,
             "night_cries": sum(1 for e in sub
-                               if datetime.fromtimestamp(int(e["start_at"])).hour
+                               if lt(int(e["start_at"])).hour
                                >= NIGHT_START_HOUR
-                               or datetime.fromtimestamp(int(e["start_at"])).hour
+                               or lt(int(e["start_at"])).hour
                                < NIGHT_END_HOUR),
         })
 
@@ -701,11 +727,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/summary":
             days = int(_first(query, "days", 14))
             cot = int(_first(query, "cot", 0) or 0)
-            return self._send_json(build_summary(self.store, days, cot))
+            tz = _first(query, "tz", "") or ""
+            return self._send_json(build_summary(self.store, days, cot, tz))
 
         if path == "/api/v1/analytics":
             days = int(_first(query, "days", 30))
-            return self._send_json(build_analytics(self.store, days))
+            tz = _first(query, "tz", "") or ""
+            return self._send_json(build_analytics(self.store, days, tz))
 
         if path == "/api/v1/events":
             limit = min(int(_first(query, "limit", 200)), 2000)

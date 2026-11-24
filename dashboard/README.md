@@ -193,6 +193,37 @@ only when the server answers that it has them.
 
 The full request and response shapes are in [`API.md`](API.md).
 
+### The same dashboard, online
+
+`dashboard/server.py` is the whole offline dashboard: one file, the Python
+standard library, no installs. But it lives on whichever machine is
+running it, on that machine's network.
+
+There is now an **online copy** — the same page, the same API, on
+Cloudflare's free tier (Workers + D1), reachable from anywhere a phone
+has a signal:
+
+```sh
+cd dashboard
+npx wrangler deploy        # see dashboard/worker/README.md for the full steps
+```
+
+Two things differ from the local copy, both because it is on the public
+internet:
+
+- **It asks you to log in.** The local copy leaves the reads open (it is
+  on your own network); the hosted one puts a login in front of every
+  read, because an open dashboard on the internet is anyone else's
+  record of your baby's nights.
+- **It counts days and nights in your timezone.** The hosted copy runs in
+  UTC; the page tells it which zone it is looking at, so "last night"
+  means your last night.
+
+Hosting changes nothing about the monitor. The hub still records every
+cry to its own flash first and uploads whenever it can reach the
+internet; if the hosted copy is down, unreachable or deleted, the
+monitor behaves exactly as it always has.
+
 ---
 
 ## 6. If it is not working

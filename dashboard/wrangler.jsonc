@@ -1,0 +1,23 @@
+{
+  // The hosted copy of the caregiver dashboard (see worker/README.md).
+  // Deploy from this directory:
+  //     npx wrangler deploy
+  // The free tier needs no card: 100k requests/day, D1 5M rows read/day.
+  "name": "amazings-crynet",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    // The same page the local server serves; every request goes through
+    // the Worker first so the caregiver login covers the document too.
+    "directory": "web",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crynet",
+      "database_id": "b9891efc-970a-442a-bb69-182f79778c75"
+    }
+  ]
+}

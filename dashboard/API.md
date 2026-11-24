@@ -9,6 +9,24 @@ Everything is plain HTTP on the local network. If the service is put
 behind the internet, put a TLS-terminating proxy in front of it and have
 the hub talk to the proxy.
 
+**The hosted copy.** There is now one: a Cloudflare Worker in
+`dashboard/worker/` that serves the same API from a D1 database, on
+Cloudflare's free tier. See `dashboard/worker/README.md` for how it is
+deployed and pointed at. It differs from the local copy in two ways, and
+both matter:
+
+- **Every read needs a login.** The local copy on a home network leaves
+  the GETs open; the hosted copy puts a login in front of them, because
+  on the internet an open `/api/v1/summary` publishes the baby's whole
+  cry record to anyone who finds the URL. The hub is unaffected: it
+  sends `X-CryNet-Token` on uploads, and the same token is accepted on
+  reads for scripts.
+- **Reads may carry `?tz=<IANA zone>`.** Days, hours and nights are
+  counted in that zone, which is how a copy hosted in UTC can still show
+  the caregiver's own night. The page sends it automatically. With no
+  `tz`, the local copy uses the machine's own timezone and the hosted
+  copy uses UTC.
+
 ---
 
 ## `POST /api/v1/events` — the hub uploads a batch
