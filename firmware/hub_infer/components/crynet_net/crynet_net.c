@@ -406,8 +406,13 @@ static void upload_turn(void)
 {
     int batches = 0;
     for (; batches < BATCHES_PER_TURN; batches++) {
-        uint32_t last = 0;
-        const int n = crynet_log_pending(s_recs, BATCH_RECORDS, &last);
+        /* `mark` is the number the log says may be claimed as sent once
+         * this batch has gone.  It is not simply the highest number in
+         * the batch: two cots crying at once can end in the opposite
+         * order to the one they started in, and claiming past a record
+         * that has not gone would lose it. */
+        uint32_t mark = 0;
+        const int n = crynet_log_pending(s_recs, BATCH_RECORDS, &mark);
         if (n <= 0) {
             break;
         }
@@ -417,14 +422,14 @@ static void upload_turn(void)
                      (unsigned long)s_st.failures, s_st.last_error);
             break;
         }
-        crynet_log_mark_uploaded(last);
+        crynet_log_mark_uploaded(mark);
         s_st.uploaded += (uint32_t)n;
         s_st.batches++;
         s_st.failures = 0;
         s_st.last_error[0] = 0;
         s_st.last_ok_epoch_s = (uint32_t)(crynet_clock_epoch_ms() / 1000u);
         ESP_LOGI(TAG, "sent %d records, up to #%lu (%s)", n,
-                 (unsigned long)last, s_resp);
+                 (unsigned long)mark, s_resp);
         crynet_log_save_epoch_ms(crynet_clock_epoch_ms());
         if (n < BATCH_RECORDS) {
             batches++;

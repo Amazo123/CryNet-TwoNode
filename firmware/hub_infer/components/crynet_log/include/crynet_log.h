@@ -89,9 +89,15 @@ uint32_t crynet_log_write(uint8_t kind, uint8_t cot, uint32_t duration_ms,
                           uint8_t peak_conf, uint8_t windows,
                           uint16_t peak_rms_milli, uint16_t mean_rms_milli);
 
-/* The records that have not been sent yet, oldest first.  Returns how
- * many were written, and the number of the last one, which is what the
- * caller marks as sent. */
+/* The records that have not been sent yet, in the order the file holds
+ * them.  Returns how many were written into `out`, and the number the
+ * caller may claim as sent once the batch has gone -- everything up to
+ * it has been sent, and nothing above it has.  That number is not
+ * simply the highest one in the batch: two cots crying at once can end
+ * in the opposite order to the one they started in, and an episode
+ * that has started but not yet ended holds a number of its own.  The
+ * log accounts for both, so no record is ever claimed as sent before
+ * it has gone. */
 int crynet_log_pending(crynet_log_event_t *out, int max, uint32_t *last_seq);
 
 /* Say that everything up to this number has been sent. */
@@ -127,6 +133,15 @@ uint32_t crynet_log_dropped(void);
 /* Which run of the hub this is, counting from the first time the log
  * was made. */
 uint32_t crynet_log_boot_id(void);
+
+/* Run the on-board proof of the ordering rule: two cots crying at
+ * once, the first cry to start ending last, the uploader running in
+ * between -- every record must still be sent.  Runs on the chip,
+ * against the real component, on its own scratch file: the real log
+ * is not touched.  Returns true if the proof held.  See
+ * firmware/tools/test_log_order.py for the host model of the same
+ * property. */
+bool crynet_log_selftest(void);
 
 #ifdef __cplusplus
 }

@@ -85,6 +85,8 @@ static void print_help(void)
     ESP_LOGI(TAG, "  net name <name>   this hub's name on the dashboard");
     ESP_LOGI(TAG, "  net token <t>     the dashboard's shared secret");
     ESP_LOGI(TAG, "  upload        send the unsent records now");
+    ESP_LOGI(TAG, "  logtest       prove, on this chip, that out-of-order "
+                  "records are not lost");
 }
 
 /* The kind of record, in the word the caregiver would use. */
@@ -346,6 +348,17 @@ static void run_line(const char *line)
                       "watch for its next line, or type net");
         return;
     }
+    if (strcmp(line, "logtest") == 0) {
+        /* The proof the ordering rule holds on this chip.  It touches
+         * only its own scratch file; the real log is untouched. */
+        if (crynet_log_selftest()) {
+            ESP_LOGW(TAG, "logtest: PASS");
+        } else {
+            ESP_LOGE(TAG, "logtest: FAIL -- a record was lost or "
+                          "claimed before it was sent");
+        }
+        return;
+    }
     if (strncmp(line, "alert", 5) == 0) {
         const char *arg = line + 5;
         while (*arg == ' ') {
@@ -374,7 +387,7 @@ static void console_task(void *arg)
     int len = 0;
 
     ESP_LOGI(TAG, "the console is listening: help, status, alert <cot>, "
-                  "clear, history, log, net, upload");
+                  "clear, history, log, net, upload, logtest");
 
     for (;;) {
         uint8_t c;

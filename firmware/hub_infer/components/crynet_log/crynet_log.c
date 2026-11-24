@@ -39,6 +39,16 @@ static const char *TAG = "crylog";
 #define META_PATH   "/log/meta.bin"
 #define EVENTS_TMP  "/log/events.tmp"
 
+/* The self-test's own files, on the same partition.  They are deleted
+ * when it finishes and are never the real log. */
+#define SELFTEST_PATH      "/log/selftest.bin"
+#define SELFTEST_META_PATH "/log/selftest.meta"
+
+/* Where the counters live.  A variable rather than a constant so the
+ * self-test can point it at its own file: the real counters must not
+ * be touched by a test, not even for a moment. */
+static const char *s_meta_path = META_PATH;
+
 #define REC_SIZE    32u
 #define HEADER_SIZE 16u
 
@@ -120,7 +130,7 @@ static bool save_meta_locked(void)
      * thirty-two bytes where they already are.  The counters file is
      * written on the path between a cot's microphone and the
      * caregiver's wrist, so what it costs is worth counting. */
-    const int fd = open(META_PATH, O_WRONLY | O_CREAT, 0644);
+    const int fd = open(s_meta_path, O_WRONLY | O_CREAT, 0644);
     if (fd < 0) {
         ESP_LOGE(TAG, "cannot write the counters: %s", strerror(errno));
         return false;
@@ -218,23 +228,175 @@ static bool append_locked(const crynet_log_event_t *rec)
     return true;
 }
 
-/* The index of the first record numbered above `seq`.  The numbers only
- * ever go up, so this is a binary search -- a handful of reads even
- * with eight thousand records in the file. */
-static uint32_t first_above_locked(uint32_t seq)
+/* What the file holds that has not been sent yet.
+ *
+ * The file is in the order the records were *written*, and that is not
+ * the order they were *numbered*.  Two cots crying at once can end in
+ * the opposite order to the one they started in -- cot 1's long cry
+ * holds its number while cot 2's short one finishes first -- so a low
+ * number can sit after a high one.  Nothing here may assume the file
+ * is sorted.
+ *
+ * A binary search over it answered wrongly in exactly the case that
+ * matters: asked for the first record above a number, it could land
+ * past a record whose number was lower, and that record would then
+ * never be sent.  So the file is walked in order instead.  The walk is
+ * on the uploader's own task, never on the path between a cot's
+ * microphone and the caregiver's wrist. */
+typedef struct {
+    int      count;      /* how many records were collected */
+    uint32_t last_seq;   /* the highest number among them */
+    uint32_t stuck;      /* the lowest number that did not fit, 0 if none */
+    uint32_t total;      /* how many are still to send in all */
+    uint32_t first;      /* where the first of them sits in the file */
+} pending_t;
+
+/* How many records are read at a time when the file is walked.  A
+ * kilobyte at a time: the file is read in blocks rather than record by
+ * record, because SPIFFS charges for the call and not for the bytes. */
+#define SCAN_RECORDS 32u
+
+static crynet_log_event_t s_scan[SCAN_RECORDS];
+
+/* The batch is the *lowest* numbers still to send, not the first ones
+ * in the file.  The file is in the order the records were written,
+ * which is not the order they were numbered, so "the first ones in
+ * the file" could be a record with a high number while a lower one
+ * sits behind it -- and then that lower one would be sent over and
+ * over and the log would never move on.  These are the candidates,
+ * held in number order; one more than a full batch, so the lowest
+ * number that did not fit can be seen. */
+#define PICK_MAX 32u
+
+typedef struct {
+    uint32_t seq;
+    uint32_t index;
+} pick_t;
+
+static pick_t s_pick[PICK_MAX + 1u];
+
+/* Everything in the file whose number is above `after`.  The lowest
+ * `max` of them are written into `out` (which may be null, to count
+ * them instead) and the rest are described by `stuck`. */
+static pending_t collect_locked(uint32_t after, crynet_log_event_t *out,
+                                int max)
 {
-    uint32_t lo = 0;
-    uint32_t hi = count_locked();
-    crynet_log_event_t rec;
-    while (lo < hi) {
-        const uint32_t mid = lo + (hi - lo) / 2;
-        if (read_at_locked(mid, &rec) && rec.seq > seq) {
-            hi = mid;
-        } else {
-            lo = mid + 1;
+    pending_t p;
+    p.count = 0;
+    p.last_seq = 0;
+    p.stuck = 0;
+    p.total = 0;
+    p.first = UINT32_MAX;
+
+    if (max > (int)PICK_MAX) {
+        max = (int)PICK_MAX;
+    }
+    const uint32_t cap = (max > 0) ? (uint32_t)max + 1u : 1u;
+    uint32_t npick = 0;
+
+    const uint32_t n = count_locked();
+    for (uint32_t i = 0; i < n; ) {
+        uint32_t take = n - i;
+        if (take > SCAN_RECORDS) {
+            take = SCAN_RECORDS;
+        }
+        const off_t off = (off_t)(HEADER_SIZE + i * REC_SIZE);
+        if (pread(s_fd, s_scan, take * REC_SIZE, off) !=
+            (ssize_t)(take * REC_SIZE)) {
+            /* A short read: the flash is failing, or the file changed
+             * under us.  Stop rather than guess. */
+            ESP_LOGE(TAG, "the log could not be read at record %lu",
+                     (unsigned long)i);
+            break;
+        }
+        for (uint32_t j = 0; j < take; j++) {
+            const crynet_log_event_t *rec = &s_scan[j];
+            if (rec->seq <= after) {
+                continue;          /* already sent */
+            }
+            if (p.first == UINT32_MAX) {
+                p.first = i + j;
+            }
+            p.total++;
+            if (out == NULL) {
+                continue;          /* counting only */
+            }
+            /* Keep the lowest `cap` numbers seen so far. */
+            if (npick == cap) {
+                if (rec->seq >= s_pick[npick - 1u].seq) {
+                    continue;      /* not among the lowest */
+                }
+                npick--;
+            }
+            uint32_t k = npick;
+            while (k > 0 && s_pick[k - 1u].seq > rec->seq) {
+                s_pick[k] = s_pick[k - 1u];
+                k--;
+            }
+            s_pick[k].seq = rec->seq;
+            s_pick[k].index = i + j;
+            npick++;
+        }
+        i += take;
+    }
+
+    if (out != NULL) {
+        const uint32_t take = (npick < (uint32_t)max) ? npick : (uint32_t)max;
+        for (uint32_t k = 0; k < take; k++) {
+            if (!read_at_locked(s_pick[k].index, &out[k])) {
+                break;
+            }
+            p.count++;
+            p.last_seq = s_pick[k].seq;
+        }
+        /* The lowest number that did not fit in the batch. */
+        if (npick == cap && cap > (uint32_t)max) {
+            p.stuck = s_pick[max].seq;
         }
     }
-    return lo;
+    return p;
+}
+
+/* The lowest number that has been taken but not yet written. */
+static uint32_t lowest_open_locked(void)
+{
+    uint32_t lowest = 0;
+    for (int i = 0; i < OPEN_SLOTS; i++) {
+        if (s_open[i].seq == 0) {
+            continue;
+        }
+        if (lowest == 0 || s_open[i].seq < lowest) {
+            lowest = s_open[i].seq;
+        }
+    }
+    return lowest;
+}
+
+/* The number the uploader may claim as sent.
+ *
+ * It is not simply the highest number in the batch.  A record that is
+ * still being measured -- an episode that has started but not ended --
+ * holds a number lower than some records that have already gone, and
+ * claiming past it would lose that record for good.  So the claim
+ * stops below the lowest number still in progress, and below the
+ * lowest number that did not fit in the batch. */
+static uint32_t watermark_locked(uint32_t last_seq, uint32_t stuck)
+{
+    uint32_t w = last_seq;
+    if (stuck != 0 && (w == 0 || (stuck - 1u) < w)) {
+        w = stuck - 1u;
+    }
+    const uint32_t open = lowest_open_locked();
+    if (open != 0) {
+        const uint32_t cap = open - 1u;
+        if (cap < w) {
+            w = cap;
+        }
+    }
+    if (w < s_meta.uploaded_seq) {
+        w = s_meta.uploaded_seq;
+    }
+    return w;
 }
 
 /* ---------------------------------------------------------------- */
@@ -279,7 +441,7 @@ bool crynet_log_init(void)
     s_meta.magic = META_MAGIC;
     s_meta.next_seq = 1;
 
-    const int fd = open(META_PATH, O_RDONLY);
+    const int fd = open(s_meta_path, O_RDONLY);
     if (fd >= 0) {
         log_meta_t stored;
         if (read(fd, &stored, sizeof(stored)) == (ssize_t)sizeof(stored) &&
@@ -301,7 +463,8 @@ bool crynet_log_init(void)
     save_meta_locked();
 
     const uint32_t n = count_locked();
-    const uint32_t pending = n - first_above_locked(s_meta.uploaded_seq);
+    const pending_t p = collect_locked(s_meta.uploaded_seq, NULL, 0);
+    const uint32_t pending = p.total;
     s_ready = true;
 
     ESP_LOGI(TAG, "boot %lu: %lu records kept, %lu still to send, "
@@ -320,13 +483,12 @@ bool crynet_log_init(void)
 /* ---------------------------------------------------------------- */
 /* Writing.                                                          */
 
-uint32_t crynet_log_reserve(uint8_t kind, uint8_t cot)
-{
-    if (!s_ready) {
-        return 0;
-    }
-    xSemaphoreTake(s_lock, portMAX_DELAY);
+/* The bodies of the two writing calls, with the lock already held.
+ * They are split out so the self-test below can run the very same
+ * code against a scratch file without taking the lock twice. */
 
+static uint32_t reserve_locked(uint8_t kind, uint8_t cot)
+{
     const int64_t t0 = esp_timer_get_time();
     const uint32_t seq = s_meta.next_seq++;
     /* Saved now, not at commit: if the hub loses power mid-cry, the
@@ -368,20 +530,24 @@ uint32_t crynet_log_reserve(uint8_t kind, uint8_t cot)
     s_open[slot].cot = cot;
     s_open[slot].start_epoch_s = (uint32_t)(epoch_ms / 1000u);
     s_open[slot].start_uptime_ms = (uint32_t)crynet_clock_uptime_ms();
+    return seq;
+}
 
+uint32_t crynet_log_reserve(uint8_t kind, uint8_t cot)
+{
+    if (!s_ready) {
+        return 0;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const uint32_t seq = reserve_locked(kind, cot);
     xSemaphoreGive(s_lock);
     return seq;
 }
 
-bool crynet_log_commit(uint32_t seq, uint32_t duration_ms, uint8_t peak_conf,
-                       uint8_t windows, uint16_t peak_rms_milli,
-                       uint16_t mean_rms_milli)
+static bool commit_locked(uint32_t seq, uint32_t duration_ms, uint8_t peak_conf,
+                          uint8_t windows, uint16_t peak_rms_milli,
+                          uint16_t mean_rms_milli)
 {
-    if (!s_ready || seq == 0) {
-        return false;
-    }
-    xSemaphoreTake(s_lock, portMAX_DELAY);
-
     int slot = -1;
     for (int i = 0; i < OPEN_SLOTS; i++) {
         if (s_open[i].seq == seq) {
@@ -390,7 +556,6 @@ bool crynet_log_commit(uint32_t seq, uint32_t duration_ms, uint8_t peak_conf,
         }
     }
     if (slot < 0) {
-        xSemaphoreGive(s_lock);
         ESP_LOGW(TAG, "record %lu was not open; nothing written",
                  (unsigned long)seq);
         return false;
@@ -433,6 +598,19 @@ bool crynet_log_commit(uint32_t seq, uint32_t duration_ms, uint8_t peak_conf,
         save_meta_locked();
     }
 
+    return ok;
+}
+
+bool crynet_log_commit(uint32_t seq, uint32_t duration_ms, uint8_t peak_conf,
+                       uint8_t windows, uint16_t peak_rms_milli,
+                       uint16_t mean_rms_milli)
+{
+    if (!s_ready || seq == 0) {
+        return false;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const bool ok = commit_locked(seq, duration_ms, peak_conf, windows,
+                                  peak_rms_milli, mean_rms_milli);
     xSemaphoreGive(s_lock);
     return ok;
 }
@@ -452,34 +630,28 @@ uint32_t crynet_log_write(uint8_t kind, uint8_t cot, uint32_t duration_ms,
 /* ---------------------------------------------------------------- */
 /* Reading, for the uploader and the console.                        */
 
-int crynet_log_pending(crynet_log_event_t *out, int max, uint32_t *last_seq)
+int crynet_log_pending(crynet_log_event_t *out, int max, uint32_t *sent_upto)
 {
-    if (last_seq) {
-        *last_seq = 0;
+    if (sent_upto) {
+        *sent_upto = 0;
     }
     if (!s_ready || out == NULL || max <= 0) {
         return 0;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
 
-    const uint32_t n = count_locked();
-    const uint32_t start = first_above_locked(s_meta.uploaded_seq);
-    uint32_t take = (start < n) ? (n - start) : 0;
-    if (take > (uint32_t)max) {
-        take = (uint32_t)max;
-    }
-    for (uint32_t i = 0; i < take; i++) {
-        if (!read_at_locked(start + i, &out[i])) {
-            take = i;
-            break;
-        }
-    }
-    if (take && last_seq) {
-        *last_seq = out[take - 1].seq;
+    const pending_t p = collect_locked(s_meta.uploaded_seq, out, max);
+    if (sent_upto) {
+        /* The number the caller may claim as sent once the batch has
+         * gone.  It is worked out here, while the state that decides
+         * it is still true: an episode that is being measured holds a
+         * number of its own, and if it finished between this call and
+         * the claim, the claim must not have been made past it. */
+        *sent_upto = watermark_locked(p.last_seq, p.stuck);
     }
 
     xSemaphoreGive(s_lock);
-    return (int)take;
+    return p.count;
 }
 
 bool crynet_log_mark_uploaded(uint32_t seq)
@@ -534,10 +706,9 @@ uint32_t crynet_log_pending_count(void)
         return 0;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    const uint32_t n = count_locked();
-    const uint32_t start = first_above_locked(s_meta.uploaded_seq);
+    const pending_t p = collect_locked(s_meta.uploaded_seq, NULL, 0);
     xSemaphoreGive(s_lock);
-    return (start < n) ? (n - start) : 0;
+    return p.total;
 }
 
 uint32_t crynet_log_dropped(void)
@@ -584,8 +755,11 @@ void crynet_log_trim(void)
     xSemaphoreTake(s_lock, portMAX_DELAY);
 
     const uint32_t n = count_locked();
-    const uint32_t start = first_above_locked(s_meta.uploaded_seq);
-    const uint32_t pending = (start < n) ? (n - start) : 0;
+    const pending_t p = collect_locked(s_meta.uploaded_seq, NULL, 0);
+    const uint32_t pending = p.total;
+    /* Where the first unsent record sits.  The records before it have
+     * been sent; the ones after it have not. */
+    const uint32_t first_unsent = (p.first == UINT32_MAX) ? n : p.first;
 
     /* Keep everything still to send, plus a window of what has been
      * sent so the console's history still has something to show. */
@@ -601,15 +775,29 @@ void crynet_log_trim(void)
         return;
     }
 
-    const uint32_t drop = n - target;
-    const uint32_t sent = n - pending;
-    if (drop > sent) {
-        const uint32_t lost = drop - sent;
+    /* The old records go from the front, and only those that have
+     * been sent: the unsent ones can sit anywhere in the file, because
+     * two cots crying at once can end in the opposite order to the one
+     * they started in. */
+    uint32_t from = n - target;
+    if (from > first_unsent) {
+        from = first_unsent;
+    }
+    if (n - from > MAX_RECORDS) {
+        /* The log is over its cap and what cannot be kept are records
+         * that have not been sent.  That is a loss, and it is said out
+         * loud, because it means the hub was offline long enough to
+         * fill six megabytes. */
+        const uint32_t keep_from = n - MAX_RECORDS;
+        const uint32_t lost = (keep_from > first_unsent)
+                            ? (keep_from - first_unsent) : 0;
         s_meta.dropped += lost;
         ESP_LOGW(TAG, "the log is full and %lu unsent records are being "
                       "dropped; the hub has been offline too long",
                  (unsigned long)lost);
+        from = keep_from;
     }
+    const uint32_t keep = n - from;
 
     /* Copy the tail into a new file, then swap.  A power cut during
      * the copy leaves the original untouched. */
@@ -630,12 +818,12 @@ void crynet_log_trim(void)
     uint32_t head[4] = { EVENTS_MAGIC, FORMAT_VER, REC_SIZE, 0 };
     bool ok = write(tmp, head, HEADER_SIZE) == (ssize_t)HEADER_SIZE;
 
-    for (uint32_t done = 0; ok && done < target; ) {
-        uint32_t take = target - done;
+    for (uint32_t done = 0; ok && done < keep; ) {
+        uint32_t take = keep - done;
         if (take > COPY_CHUNK) {
             take = COPY_CHUNK;
         }
-        const off_t off = (off_t)(HEADER_SIZE + (drop + done) * REC_SIZE);
+        const off_t off = (off_t)(HEADER_SIZE + (from + done) * REC_SIZE);
         if (pread(s_fd, buf, take * REC_SIZE, off) != (ssize_t)(take * REC_SIZE)) {
             ok = false;
             break;
@@ -685,7 +873,7 @@ void crynet_log_trim(void)
     save_meta_locked();
 
     ESP_LOGI(TAG, "log compacted: %lu dropped, %lu kept",
-             (unsigned long)drop, (unsigned long)target);
+             (unsigned long)from, (unsigned long)keep);
 
     xSemaphoreGive(s_lock);
 }
@@ -711,5 +899,149 @@ bool crynet_log_clear(void)
     }
 
     xSemaphoreGive(s_lock);
+    return ok;
+}
+
+/* ---------------------------------------------------------------- */
+/* The self-test.                                                     */
+
+/* Run the awkward case against the real code, on a scratch file, and
+ * report whether it passed.
+ *
+ * The awkward case is two cots crying at once.  The first cry to start
+ * holds the lower number, and it can still be running when the second
+ * one ends -- so the record of the second cry is written first and
+ * holds the higher number, and the file of records is not in number
+ * order.  A record must still be sent.
+ *
+ * The real log is not touched: the test runs on its own file with its
+ * own counters, and everything is put back afterwards. */
+bool crynet_log_selftest(void)
+{
+    if (!s_ready || s_lock == NULL) {
+        return false;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+
+    /* Put the real state away.  The counters file's name goes with it:
+     * taking a record number rewrites the counters, and a test must not
+     * write over the real ones, not even for a moment. */
+    const int saved_fd = s_fd;
+    const log_meta_t saved_meta = s_meta;
+    const bool saved_ready = s_ready;
+    const char *const saved_meta_path = s_meta_path;
+    open_slot_t saved_open[OPEN_SLOTS];
+    memcpy(saved_open, s_open, sizeof(saved_open));
+
+    bool ok = false;
+    int fd = open(SELFTEST_PATH, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        ESP_LOGE(TAG, "the self-test cannot open its scratch file: %s",
+                 strerror(errno));
+        goto done;
+    }
+    {
+        uint32_t head[4] = { EVENTS_MAGIC, FORMAT_VER, REC_SIZE, 0 };
+        if (write(fd, head, HEADER_SIZE) != (ssize_t)HEADER_SIZE) {
+            ESP_LOGE(TAG, "the self-test cannot start its scratch file");
+            close(fd);
+            goto done;
+        }
+    }
+
+    /* Fresh state on the scratch file. */
+    s_meta_path = SELFTEST_META_PATH;
+    s_fd = fd;
+    s_ready = true;
+    memset(&s_meta, 0, sizeof(s_meta));
+    s_meta.magic = META_MAGIC;
+    s_meta.next_seq = 1;
+    s_meta.uploaded_seq = 0;
+    memset(s_open, 0, sizeof(s_open));
+
+    {
+        crynet_log_event_t batch[8];
+
+        /* Two cots.  The first cry starts first and is still running
+         * when the second one ends. */
+        const uint32_t long_cry = reserve_locked(CRYNET_LOG_CRY, 1);
+        const uint32_t short_cry = reserve_locked(CRYNET_LOG_CRY, 2);
+        if (long_cry == 0 || short_cry == 0) {
+            ESP_LOGE(TAG, "the self-test could not take a record number");
+            goto restore;
+        }
+        commit_locked(short_cry, 5000, 98, 2, 300, 120);
+
+        /* The uploader runs now, while the long cry is still going. */
+        uint32_t mark = 0;
+        int n = 0;
+        pending_t p = collect_locked(s_meta.uploaded_seq, batch, 8);
+        mark = watermark_locked(p.last_seq, p.stuck);
+        n = p.count;
+        bool seen = false;
+        for (int i = 0; i < n; i++) {
+            if (batch[i].seq == short_cry) {
+                seen = true;
+            }
+        }
+        if (!seen) {
+            ESP_LOGE(TAG, "the self-test failed: the cry that finished "
+                          "first was not sent");
+            goto restore;
+        }
+        /* The claim must not have passed the cry still running. */
+        if (mark >= long_cry) {
+            ESP_LOGE(TAG, "the self-test failed: the hub claimed #%lu as "
+                          "sent while #%lu was still running",
+                     (unsigned long)mark, (unsigned long)long_cry);
+            goto restore;
+        }
+        s_meta.uploaded_seq = mark;
+
+        /* The long cry ends now, and its record must go out too. */
+        commit_locked(long_cry, 60000, 99, 20, 900, 400);
+        p = collect_locked(s_meta.uploaded_seq, batch, 8);
+        seen = false;
+        for (int i = 0; i < p.count; i++) {
+            if (batch[i].seq == long_cry) {
+                seen = true;
+            }
+        }
+        if (!seen) {
+            ESP_LOGE(TAG, "the self-test failed: the cry that finished "
+                          "late was never sent");
+            goto restore;
+        }
+        mark = watermark_locked(p.last_seq, p.stuck);
+        s_meta.uploaded_seq = mark;
+
+        /* And nothing is left behind. */
+        p = collect_locked(s_meta.uploaded_seq, batch, 8);
+        if (p.count != 0) {
+            ESP_LOGE(TAG, "the self-test failed: %d records were left "
+                          "behind", p.count);
+            goto restore;
+        }
+        ok = true;
+    }
+
+restore:
+    /* Put the real state back, exactly as it was. */
+    s_fd = saved_fd;
+    s_meta = saved_meta;
+    s_ready = saved_ready;
+    s_meta_path = saved_meta_path;
+    memcpy(s_open, saved_open, sizeof(s_open));
+    if (fd >= 0) {
+        close(fd);
+        unlink(SELFTEST_PATH);
+        unlink(SELFTEST_META_PATH);
+    }
+done:
+    xSemaphoreGive(s_lock);
+    if (ok) {
+        ESP_LOGW(TAG, "logtest: PASS -- a cry that finishes out of order "
+                      "is still sent");
+    }
     return ok;
 }
