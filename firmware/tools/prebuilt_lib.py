@@ -134,6 +134,37 @@ def _git_tracked(paths: list[Path]) -> set[str] | None:
     return files or None
 
 
+def _git_ignored(paths: list[Path]) -> set[str] | None:
+    """The files under `paths` that git ignores.
+
+    Untracked-but-not-ignored files are *source*: a component that has
+    been written but not yet committed is still part of the build, and
+    the guarantee that the shipped image matches the source has to
+    cover it.  So it is git's ignored files that are left out, not its
+    untracked ones.
+
+    Returns None when git cannot answer, so the caller falls back to
+    what it knows.
+    """
+    rels = []
+    for p in paths:
+        try:
+            rels.append(p.relative_to(ROOT).as_posix())
+        except ValueError:
+            return None
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z", "--others",
+             "--ignored", "--exclude-standard", "--", *rels],
+            capture_output=True, timeout=60, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return {n for n in out.stdout.decode("utf-8", "replace").split("\0") if n}
+
+
 def _excluded(path: Path, base: Path, rules: dict) -> bool:
     rel_parts = path.relative_to(base).parts
     if any(part in rules["exclude_dirs"] for part in rel_parts[:-1]):
@@ -155,6 +186,7 @@ def source_files(role: str, rules: dict | None = None) -> list[str]:
     rules = rules or RULES
     dirs, extras = ROLE_SOURCES[role]
     tracked = _git_tracked(dirs)
+    ignored = _git_ignored(dirs)
     found: set[str] = set()
 
     for base in dirs:
@@ -166,8 +198,14 @@ def source_files(role: str, rules: dict | None = None) -> list[str]:
             if _excluded(path, base, rules):
                 continue
             rel = path.relative_to(ROOT).as_posix()
-            if tracked is not None and rel not in tracked:
-                continue
+            if tracked is not None:
+                # Untracked is not the same as ignored.  A file git
+                # ignores is build output or an IDE's scratch file; a
+                # file git merely has not been told about is source
+                # that has not been committed yet, and the shipped
+                # image has to be checked against it.
+                if rel not in tracked and (ignored is None or rel in ignored):
+                    continue
             found.add(rel)
 
     for extra in extras:

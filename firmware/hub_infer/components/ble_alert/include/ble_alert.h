@@ -57,14 +57,24 @@ typedef struct __attribute__((packed)) {
 bool ble_alert_start(void);
 
 /* Publish a cot's state.  `crying` true raises the alert, false cancels
- * it.  Called when the state changes, not on every window. */
-void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct);
+ * it.  Called when the state changes, not on every window.
+ *
+ * `record` is the cry log's number for this event, and it is what the
+ * wearable prints as "event #N" -- the same number the dashboard holds,
+ * so a caregiver who saw an alert at three in the morning can find that
+ * exact cry afterwards.  The packet's field is sixteen bits, so the
+ * number wraps at 65536 (about three years of nights at fifty cries a
+ * night); the dashboard keeps the whole number.  Pass 0 when the log
+ * could not be opened: the hub then counts its own events, as it always
+ * did, and the wrist still shows a number that rises. */
+void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct,
+                       uint32_t record);
 
 /* Tell the caregiver that a cot has gone deaf: its windows never arrive
  * at the hub, so the model never sees its audio and it cannot announce a
  * cry.  Silence from a cot that is not being watched is the one thing a
- * monitor must not do. */
-void ble_alert_publish_deaf(uint8_t cot_id);
+ * monitor must not do.  `record` as above. */
+void ble_alert_publish_deaf(uint8_t cot_id, uint32_t record);
 
 /* Publish the whole system's state, for the state characteristic. */
 void ble_alert_publish_state(const ble_state_packet_t *state);

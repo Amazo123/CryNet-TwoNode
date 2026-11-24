@@ -10,5 +10,5 @@
 idf_component_register(
     SRCS "main.c" "probes.c" "link_stage.c" "console.c"
     INCLUDE_DIRS "."
-    REQUIRES crynet_model crynet_dsp crynet_infer crynet_proto node_link ble_alert hub_display esp_timer nvs_flash spi_flash driver
+    REQUIRES crynet_model crynet_dsp crynet_infer crynet_proto node_link ble_alert hub_display crynet_clock crynet_log crynet_net spiffs esp_http_client esp_netif esp_wifi mbedtls esp_timer nvs_flash spi_flash driver
 )

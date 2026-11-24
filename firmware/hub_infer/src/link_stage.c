@@ -19,6 +19,7 @@
 
 #include "crynet_model.h"
 #include "crynet_proto.h"
+#include "crynet_log.h"
 #include "node_link.h"
 
 static const char *TAG = "link";
@@ -254,6 +255,20 @@ typedef struct {
     int64_t  cry_started_us;   /* when the current cry began */
     uint8_t  last_confidence;  /* the last confirmed confidence, in percent */
     bool     published_cry;    /* what the caregiver's phone was last told */
+    /* The record being written for the cry that is happening now.  The
+     * number is taken when the episode opens, so the wrist can show it
+     * while the cry is still going, and the measurements are gathered
+     * window by window until it ends.  Zero means no episode is open. */
+    uint32_t log_seq;
+    uint32_t log_last_seq;     /* and the last one, kept after it closes,
+                                * so "the cry is over" names the cry that
+                                * just ended */
+    uint8_t  log_peak_conf;
+    uint16_t log_peak_rms_milli;
+    uint32_t log_rms_sum_milli;
+    uint16_t log_windows;
+    uint16_t log_window_seq;   /* the same window is judged twice; it is
+                                * measured once */
     /* When this cot first became clearly louder than the named one.
      * The name only moves when that has been true for
      * COT_SWITCH_DWELL_MS, so a pair of microphones that cross over
@@ -301,6 +316,93 @@ static node_state_t state[NODE_LINK_MAX_NODES];
 /* Whether each cot was on the panel the last time round, so that a
  * change can be announced instead of only shown. */
 static bool s_was_live[NODE_LINK_MAX_NODES];
+
+/* The cry record.
+ *
+ * One record per episode, not one per window: a baby who cries for a
+ * minute produces twenty-odd windows and one episode, and it is the
+ * episode the caregiver wants to see -- when it started, how long it
+ * went on, how loud it was.  So the episode opens a record, each window
+ * adds its measurements to it, and the record is written when the cry
+ * has been quiet long enough to be over.
+ *
+ * None of this can hold up the announcement.  Every call into the log
+ * is best-effort: if the flash will not mount the number comes back
+ * nought, these helpers do nothing, and the wrist is told exactly what
+ * it is told today. */
+static void cry_episode_open(node_state_t *st, uint8_t node_id)
+{
+    st->log_seq = crynet_log_reserve(CRYNET_LOG_CRY, node_id);
+    st->log_last_seq = st->log_seq;
+    st->log_peak_conf = 0;
+    st->log_peak_rms_milli = 0;
+    st->log_rms_sum_milli = 0;
+    st->log_windows = 0;
+    st->log_window_seq = 0xFFFFu;
+}
+
+static void cry_episode_note(node_state_t *st, float rms, float p_cry)
+{
+    if (st->log_seq == 0) {
+        return;
+    }
+    if (st->log_windows > 0 && st->request_seq == st->log_window_seq) {
+        return;
+    }
+    st->log_window_seq = st->request_seq;
+    uint32_t milli = (uint32_t)(rms * 1000.0f + 0.5f);
+    if (milli > 65535u) {
+        milli = 65535u;
+    }
+    if (milli > st->log_peak_rms_milli) {
+        st->log_peak_rms_milli = (uint16_t)milli;
+    }
+    st->log_rms_sum_milli += milli;
+    if (st->log_windows < 65535u) {
+        st->log_windows++;
+    }
+    const uint8_t conf = (uint8_t)(p_cry * 100.0f + 0.5f);
+    if (conf > st->log_peak_conf) {
+        st->log_peak_conf = conf;
+    }
+}
+
+static void cry_episode_close(node_state_t *st)
+{
+    if (st->log_seq == 0) {
+        return;
+    }
+    /* The hold is a display artefact: the cry ended CRY_HOLD_MS before
+     * the hold expired, so the hold is taken back off.  A window covers
+     * two seconds of audio, so two seconds is the honest floor for an
+     * episode that was heard at all. */
+    int64_t end_us = st->cry_until_us - (int64_t)CRY_HOLD_MS * 1000;
+    if (end_us < st->cry_started_us) {
+        end_us = st->cry_started_us;
+    }
+    uint32_t dur_ms = (uint32_t)((end_us - st->cry_started_us) / 1000);
+    if (dur_ms < 2000u) {
+        dur_ms = 2000u;
+    }
+    const uint16_t mean = st->log_windows
+        ? (uint16_t)(st->log_rms_sum_milli / st->log_windows) : 0;
+    const uint8_t windows = st->log_windows > 255u ? 255u
+                                                   : (uint8_t)st->log_windows;
+    crynet_log_commit(st->log_seq, dur_ms, st->log_peak_conf, windows,
+                      st->log_peak_rms_milli, mean);
+    st->log_seq = 0;
+}
+
+/* The record number a cot's alert should carry. */
+static uint32_t cot_record(uint8_t node_id)
+{
+    for (int i = 0; i < NODE_LINK_MAX_NODES; i++) {
+        if (state[i].heard && state[i].node_id == node_id) {
+            return state[i].log_last_seq;
+        }
+    }
+    return 0;
+}
 
 /* The difference between two readings of one of the node's own radio
  * counters.  The counters restart when the node reboots, and subtracting
@@ -370,6 +472,7 @@ static int64_t  s_state_published_ms    = -1000;
  * if that cot had heard a cry -- which is how the caregiver's phone
  * and the wearable are checked without making a sound. */
 static uint8_t s_test_cot = 0;
+static uint32_t s_test_seq = 0;   /* its record in the cry log */
 
 /* How much louder another cot has to be before the caregiver is told
  * about it instead of the cot that was already named. */
@@ -584,12 +687,17 @@ static void analyse(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer,
     if (confirmed) {
         if (!st->cry_active) {
             st->cry_started_us = now;
+            cry_episode_open(st, node_id);
         }
         st->cry_active = true;
         st->cry_until_us = now + (CRY_HOLD_MS * 1000);
         st->last_confidence = (uint8_t)(p_cry * 100.0f + 0.5f);
     } else if (st->cry_active && now > st->cry_until_us) {
+        cry_episode_close(st);
         st->cry_active = false;
+    }
+    if (st->cry_active) {
+        cry_episode_note(st, rms, p_cry);
     }
 
     ESP_LOGI(TAG, "node %u: front end %.1f ms, inference %.1f ms, "
@@ -616,6 +724,7 @@ bool link_stage_crying(uint8_t node_id)
     for (int i = 0; i < NODE_LINK_MAX_NODES; i++) {
         if (state[i].heard && state[i].node_id == node_id) {
             if (state[i].cry_active && now > state[i].cry_until_us) {
+                cry_episode_close(&state[i]);
                 state[i].cry_active = false;
             }
             return state[i].cry_active;
@@ -628,6 +737,7 @@ bool link_stage_crying(uint8_t node_id)
 void link_stage_test_alert(uint8_t cot_id)
 {
     s_test_cot = cot_id;
+    s_test_seq = crynet_log_write(CRYNET_LOG_TEST, cot_id, 0, 0, 0, 0, 0);
     ESP_LOGW(TAG, "the console is holding a TEST ALERT for cot %u",
              (unsigned)cot_id);
 }
@@ -1361,7 +1471,7 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
          * console says otherwise. */
         if (s_test_cot != 0) {
             if (!s_ble_cry || s_ble_cot != s_test_cot) {
-                ble_alert_publish(s_test_cot, true, 100);
+                ble_alert_publish(s_test_cot, true, 100, s_test_seq);
                 s_ble_cot = s_test_cot;
                 s_ble_cry = true;
                 any_state_changed = true;
@@ -1369,7 +1479,8 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
         } else if (loudest != NULL) {
             if (!s_ble_cry || loudest->node_id != s_ble_cot) {
                 ble_alert_publish(loudest->node_id, true,
-                                  loudest->last_confidence);
+                                  loudest->last_confidence,
+                                  loudest->log_last_seq);
                 s_ble_cot = loudest->node_id;
                 s_ble_cry = true;
                 any_state_changed = true;
@@ -1382,7 +1493,7 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
             }
         } else if (s_ble_cry) {
             /* The cry is over: the cot that was named is told so. */
-            ble_alert_publish(s_ble_cot, false, 0);
+            ble_alert_publish(s_ble_cot, false, 0, cot_record(s_ble_cot));
             s_ble_cry = false;
             s_ble_cot = 0;
             any_state_changed = true;
@@ -1410,10 +1521,19 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
                     const uint8_t bit =
                         (uint8_t)(1u << (state[j].node_id - 1u));
                     if (deaf_new & bit) {
-                        ble_alert_publish_deaf(state[j].node_id);
+                        /* A cot that has gone deaf will send no more
+                         * windows, so its cry episode can never be seen
+                         * to end.  It is closed here, or the record
+                         * would never be written at all. */
+                        cry_episode_close(&state[j]);
+                        const uint32_t rec = crynet_log_write(
+                            CRYNET_LOG_DEAF, state[j].node_id, 0, 0, 0, 0, 0);
+                        ble_alert_publish_deaf(state[j].node_id, rec);
                     } else if (deaf_gone & bit) {
                         /* The link is back: the cot is watched again. */
-                        ble_alert_publish(state[j].node_id, false, 0);
+                        const uint32_t rec = crynet_log_write(
+                            CRYNET_LOG_HEARD, state[j].node_id, 0, 0, 0, 0, 0);
+                        ble_alert_publish(state[j].node_id, false, 0, rec);
                     }
                 }
             }

@@ -38,6 +38,9 @@
 #include "console.h"
 #include "ble_alert.h"
 #include "hub_display.h"
+#include "crynet_clock.h"
+#include "crynet_log.h"
+#include "crynet_net.h"
 
 static const char *TAG = "crynet";
 
@@ -255,12 +258,38 @@ void app_main(void)
          * mid-init and the ESP-NOW link never started.  The radio takes
          * what it needs while the heap is whole, and BLE lives on what
          * is left. */
+        /* The hub's memory comes up before its radios.  Six megabytes
+         * of the flash were reserved for this from the start and never
+         * mounted; now they hold every cry the hub hears, whether or
+         * not there is a network to send them to.  A flash that will
+         * not mount is a warning, not a stop -- the monitoring is the
+         * product, the record is a benefit. */
+        crynet_clock_init();
+        if (crynet_log_init()) {
+            crynet_clock_restore(crynet_log_last_epoch_ms());
+            /* The hub's own start is a record too: a gap in the cry
+             * history means either a quiet night or a hub that was off,
+             * and only this tells them apart. */
+            crynet_log_write(CRYNET_LOG_BOOT, 0, 0, 0, 0, 0, 0);
+        } else {
+            ESP_LOGW(TAG, "the cry log could not be opened; "
+                          "the hub carries on without a record");
+        }
+
         if (!link_stage_radio_start()) {
             ESP_LOGW(TAG, "the radio could not be started; "
                           "the hub carries on without it");
         }
         ESP_LOGI(TAG, "free int   : %d bytes with the radio up",
                  (int)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        /* The uploader shares the radio with ESP-NOW, so its interface
+         * is created here, while the internal heap is still whole --
+         * the same reason the radio comes up before Bluetooth.  With
+         * no network configured it starts nothing and costs nothing. */
+        if (!crynet_net_start()) {
+            ESP_LOGW(TAG, "the uploader could not be started; "
+                          "cries are still recorded in the hub's flash");
+        }
         if (!ble_alert_start()) {
             ESP_LOGW(TAG, "the Bluetooth alert server could not be started; "
                           "the hub carries on without it");

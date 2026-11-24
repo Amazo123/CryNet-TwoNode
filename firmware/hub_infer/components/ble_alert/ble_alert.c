@@ -49,7 +49,19 @@ static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 static bool     s_running = false;
 static bool     s_alert_notify = false;
 static bool     s_state_notify = false;
+/* The number the wrist shows.  It is the cry log's record number when
+ * there is a log, so the wrist and the dashboard name the same cry.
+ * This counter is only the fallback for a hub whose flash would not
+ * mount: the caregiver still gets a number that rises. */
 static uint16_t s_event_id = 0;
+
+static uint16_t event_number(uint32_t record)
+{
+    if (record != 0) {
+        return (uint16_t)(record & 0xFFFFu);
+    }
+    return ++s_event_id;
+}
 
 /* The advertising policy.
  *
@@ -330,13 +342,13 @@ static void notify_value(uint16_t handle, bool subscribed, const void *value,
     }
 }
 
-void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct)
+void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct,
+                       uint32_t record)
 {
     s_alert_value.cot_id = cot_id;
     s_alert_value.alert_type = crying ? 1u : 2u;
     s_alert_value.confidence_pct = confidence_pct;
-    s_event_id++;
-    s_alert_value.event_id = s_event_id;
+    s_alert_value.event_id = event_number(record);
 
     ESP_LOGI(TAG, "%s cot %u at %u%%",
              crying ? "a cry on" : "the cry on", cot_id,
@@ -346,13 +358,12 @@ void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct)
                  (uint16_t)sizeof s_alert_value);
 }
 
-void ble_alert_publish_deaf(uint8_t cot_id)
+void ble_alert_publish_deaf(uint8_t cot_id, uint32_t record)
 {
     s_alert_value.cot_id = cot_id;
     s_alert_value.alert_type = 3u;
     s_alert_value.confidence_pct = 0;
-    s_event_id++;
-    s_alert_value.event_id = s_event_id;
+    s_alert_value.event_id = event_number(record);
 
     ESP_LOGW(TAG, "cot %u is deaf: the hub cannot hear it", cot_id);
 

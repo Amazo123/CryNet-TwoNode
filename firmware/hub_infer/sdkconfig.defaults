@@ -62,3 +62,26 @@ CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
 # freed up (the probe buffers moved to PSRAM) these are affordable.
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=32
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
+
+# The uploader, for when there is a network.  Nothing here is on the
+# path between a cot and the wrist: with no Wi-Fi the hub behaves
+# exactly as it did before any of this existed.
+#
+# The root certificates that let the hub check an https:// dashboard's
+# identity.  The bundle is about 60 KB of flash and is only read when a
+# connection is actually made.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Two time servers, so one being unreachable does not leave the hub
+# without a clock.  lwIP's default room is one.
+CONFIG_LWIP_SNTP_MAX_SERVERS=3
+
+# Wi-Fi credentials and the dashboard's address live in NVS, so they
+# survive a reflash and never have to be compiled into an image.
+CONFIG_NVS_ENCRYPTION=n
+
+# The station keeps its config in RAM: the cot link owns the radio's
+# channel, and nothing about the network should be written to flash on
+# every boot.
+CONFIG_ESP_WIFI_NVS_ENABLED=n
