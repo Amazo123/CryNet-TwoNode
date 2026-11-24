@@ -390,8 +390,18 @@ static bool post_batch(const crynet_log_event_t *recs, int n)
     esp_http_client_cleanup(client);
 
     if (err != ESP_OK) {
-        snprintf(s_st.last_error, sizeof(s_st.last_error),
-                 "%s", esp_err_to_name(err));
+        /* The HTTP client answers a 401 by trying to meet the server's
+         * authentication challenge, and with nothing to answer it with
+         * it returns ESP_ERR_NOT_SUPPORTED instead of the status.  So
+         * the status is put in the message here: "HTTP 401" says what
+         * actually happened, where the bare error name says nothing. */
+        if (status > 0) {
+            snprintf(s_st.last_error, sizeof(s_st.last_error),
+                     "HTTP %d (%s)", status, esp_err_to_name(err));
+        } else {
+            snprintf(s_st.last_error, sizeof(s_st.last_error),
+                     "%s", esp_err_to_name(err));
+        }
         return false;
     }
     if (status < 200 || status >= 300) {
@@ -548,15 +558,21 @@ bool crynet_net_start(void)
         return false;
     }
 
-    /* node_link has already initialised the radio for ESP-NOW.  Only
-     * the station interface is missing. */
+    /* node_link has already initialised the radio for ESP-NOW, and it
+     * created the station interface before the radio started -- which is
+     * the only order that works (see node_link.c).  So the interface is
+     * already there: look it up rather than making a second one. */
     wifi_mode_t mode = WIFI_MODE_NULL;
     if (esp_wifi_get_mode(&mode) != ESP_OK) {
         ESP_LOGE(TAG, "the radio is not up; start node_link first");
         return false;
     }
-    if (esp_netif_create_default_wifi_sta() == NULL) {
-        ESP_LOGE(TAG, "cannot create the station interface");
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta == NULL) {
+        /* It cannot be created here: the interface has to exist before
+         * the radio starts, or lwIP never gets it (see node_link.c). */
+        ESP_LOGE(TAG, "the station interface is missing; node_link must "
+                      "make it before the radio starts");
         return false;
     }
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, radio_events, NULL);

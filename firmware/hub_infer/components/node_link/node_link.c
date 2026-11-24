@@ -606,6 +606,18 @@ bool node_link_start(node_link_t *nl)
         return false;
     }
 
+    /* The station interface has to exist *before* the radio starts.
+     * esp_netif adds the interface to lwIP when the driver reports that
+     * the station has started, so one created after that never joins the
+     * stack: it keeps an MTU of zero, and lwIP then refuses to run DHCP
+     * on it ("MTU is too small").  The symptom is a hub that joins the
+     * Wi-Fi and never gets an address -- it uploads nothing and the
+     * clock never starts -- while everything else looks healthy. */
+    if (esp_netif_create_default_wifi_sta() == NULL) {
+        ESP_LOGE(TAG, "cannot create the station interface");
+        return false;
+    }
+
     if (esp_wifi_start() != ESP_OK) {
         ESP_LOGE(TAG, "esp_wifi_start failed");
         return false;

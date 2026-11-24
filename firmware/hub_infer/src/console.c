@@ -326,7 +326,10 @@ static void run_line(const char *line)
         print_history(*arg ? atoi(arg) : 10);
         return;
     }
-    if (strncmp(line, "log", 3) == 0) {
+    /* The whole word, or the word followed by a space: a bare prefix
+     * match would swallow "logtest" here and print the log instead of
+     * running the self-test. */
+    if (strcmp(line, "log") == 0 || strncmp(line, "log ", 4) == 0) {
         const char *arg = arg_after(line, 3);
         if (strcmp(arg, "clear") == 0) {
             if (crynet_log_clear()) {

@@ -19,11 +19,23 @@ in reply:
     upload        send the unsent records now
     logtest       prove, on this chip, that out-of-order records are not lost
 
-Opening the port resets the board -- the USB-serial bridge holds its
-enable line -- so the board is booting for a few seconds every time this
-runs.  That is why the tool waits for the console to announce itself
-before sending anything: a command written into a booting board is a
-command thrown away, which looks exactly like a command that was ignored.
+Two things about the board make this fiddly, and the tool handles both.
+
+**The board may reboot when the port opens.**  The USB-serial bridge holds
+its enable line, so opening the port can reset the hub -- and a command
+written into a board that is still booting is a command thrown away,
+which looks exactly like a command that was ignored.  So the tool waits
+for the console's own banner ("the console is listening") before it
+types anything.
+
+**But the banner only appears on a boot.**  If the hub is already
+running, it printed the banner before the port was opened and the tool
+will never see it.  In that case the tool waits for the board to show
+signs of life instead, and then it knows a command landed by the echo
+the console prints for every command it receives ("console: << net").
+If a command is not echoed, it is sent again -- which is what makes this
+safe on a board that was still booting: a command typed too early is
+simply echoed late, and only one of them is ever run.
 
 Usage:
     python firmware/tools/hub_console.py --port COM32 --send status
@@ -49,6 +61,9 @@ except ImportError:  # pragma: no cover
 # The console says this when it is ready for commands.
 READY = "the console is listening"
 
+# The console echoes every command it receives.
+ECHO = "console: <<"
+
 
 def list_serial_ports() -> int:
     ports = list(list_ports.comports())
@@ -58,6 +73,48 @@ def list_serial_ports() -> int:
     for p in ports:
         print(f"{p.device:<10} {p.description}")
     return 0
+
+
+def read_for(port, seconds: float, sink=None):
+    """Read the port for a while, returning (text, saw_ready)."""
+    end = time.time() + seconds
+    text = ""
+    ready = False
+    while time.time() < end:
+        line = port.readline()
+        if not line:
+            continue
+        chunk = line.decode("utf-8", "replace")
+        text += chunk
+        if sink is not None:
+            sink.write(chunk)
+            sink.flush()
+        if READY in chunk:
+            ready = True
+    return text, ready
+
+
+def send_and_wait_echo(port, command: str, settle: float) -> bool:
+    """Send a command and wait for the console to echo it.
+
+    Returns True when the echo was seen.  The command is sent again if
+    it was not: on a board that is still booting, the first attempt is
+    swallowed and the second lands.
+    """
+    for attempt in range(3):
+        port.write((command + "\n").encode("ascii", "replace"))
+        port.flush()
+        end = time.time() + settle
+        while time.time() < end:
+            line = port.readline()
+            if not line:
+                continue
+            text = line.decode("utf-8", "replace")
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            if ECHO in text and command in text:
+                return True
+    return False
 
 
 def main() -> int:
@@ -84,32 +141,47 @@ def main() -> int:
         return 1
 
     with port:
-        # The board is booting.  Wait for the console to say it is ready,
-        # so that nothing is typed into a board that is not listening.
+        # The board may be booting now.  Wait for the console to say it
+        # is ready, so that nothing is typed into a board that is not
+        # listening yet.
         deadline = time.time() + args.wait
         ready = False
+        alive = False
         while time.time() < deadline:
             line = port.readline()
-            if line:
-                text = line.decode("utf-8", "replace")
-                sys.stdout.write(text)
-                sys.stdout.flush()
-                if READY in text:
-                    ready = True
-                    break
+            if not line:
+                continue
+            text = line.decode("utf-8", "replace")
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            if READY in text:
+                ready = True
+                break
+            alive = True   # the board is talking, so it is past the boot
+
         if not ready:
-            print(f"\n[hub-console] the console did not come up on "
-                  f"{args.port} within {args.wait:.0f}s", file=sys.stderr)
-            return 1
+            if not alive:
+                print(f"\n[hub-console] the console did not come up on "
+                      f"{args.port} within {args.wait:.0f}s", file=sys.stderr)
+                return 1
+            # The board was already running: its banner was printed
+            # before the port opened.  It is alive, so it is listening.
+            print("\n[hub-console] the board was already running; "
+                  "sending the commands now", file=sys.stderr)
 
         for command in args.send:
             time.sleep(0.3)
             print(f"> {command}")
-            port.write((command + "\n").encode("ascii", "replace"))
-            port.flush()
-            # Listen until the board goes quiet for a moment.
-            end = time.time() + args.settle
-            while time.time() < end:
+            if not send_and_wait_echo(port, command, args.settle):
+                print(f"\n[hub-console] {args.port} did not echo "
+                      f"{command!r}; it may not have taken it", file=sys.stderr)
+                return 1
+            # Listen while the board answers, but not for ever: a busy
+            # board prints something every second or two, so "until it
+            # goes quiet" would never end.
+            end = time.time() + 1.0
+            hard_end = time.time() + args.settle + 5.0
+            while time.time() < end and time.time() < hard_end:
                 line = port.readline()
                 if line:
                     sys.stdout.write(line.decode("utf-8", "replace"))
