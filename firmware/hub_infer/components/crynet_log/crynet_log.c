@@ -919,6 +919,12 @@ bool crynet_log_clear(void)
 bool crynet_log_selftest(void)
 {
     if (!s_ready || s_lock == NULL) {
+        /* Not a failed proof: there is no log to prove anything about.
+         * The flash could not be mounted, so the hub is keeping no
+         * record at all -- a different fault, and the owner should be
+         * told which one it is. */
+        ESP_LOGE(TAG, "the self-test cannot run: the log is not available, "
+                      "so the hub is keeping no record");
         return false;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);

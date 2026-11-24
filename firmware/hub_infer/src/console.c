@@ -354,8 +354,9 @@ static void run_line(const char *line)
         if (crynet_log_selftest()) {
             ESP_LOGW(TAG, "logtest: PASS");
         } else {
-            ESP_LOGE(TAG, "logtest: FAIL -- a record was lost or "
-                          "claimed before it was sent");
+            ESP_LOGE(TAG, "logtest: FAIL -- read the line above: either a "
+                          "record was lost or claimed before it was sent, "
+                          "or the log could not be opened at all");
         }
         return;
     }
