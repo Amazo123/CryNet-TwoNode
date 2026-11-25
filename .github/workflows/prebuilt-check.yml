@@ -46,19 +46,29 @@ jobs:
         with:
           python-version: '3.11'
 
-      # The hub is a PlatformIO / ESP-IDF project.  It needs the two
-      # vendored components, pinned by revision in fetch_deps.sh.
+      # The raw logs of a failed step are only visible to a signed-in
+      # user; the run's *summary* is public.  Every step that can fail
+      # tees its output to a file, and a companion step appends the tail
+      # of that file to the summary -- so the actual error is readable
+      # from the run page without an account.
       - name: Fetch the vendored firmware dependencies
         run: |
-          git clone --filter=blob:none https://github.com/espressif/esp-tflite-micro.git \
-            firmware/hub_infer/components/esp-tflite-micro
-          git -C firmware/hub_infer/components/esp-tflite-micro fetch --depth 1 origin dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
-          git -C firmware/hub_infer/components/esp-tflite-micro checkout dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
-          git clone --filter=blob:none https://github.com/espressif/esp-nn.git \
-            firmware/hub_infer/components/esp-nn
-          git -C firmware/hub_infer/components/esp-nn fetch --depth 1 origin 744d48deae6aa4a4d7b93b6a80f548d5298813a4
-          git -C firmware/hub_infer/components/esp-nn checkout 744d48deae6aa4a4d7b93b6a80f548d5298813a4
-          python firmware/tools/patch_deps.py
+          set -o pipefail
+          {
+            git clone --filter=blob:none https://github.com/espressif/esp-tflite-micro.git \
+              firmware/hub_infer/components/esp-tflite-micro
+            git -C firmware/hub_infer/components/esp-tflite-micro fetch --depth 1 origin dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
+            git -C firmware/hub_infer/components/esp-tflite-micro checkout dd4085950a119d9e33a6de1d7be1fc7fe29e0cfc
+            git clone --filter=blob:none https://github.com/espressif/esp-nn.git \
+              firmware/hub_infer/components/esp-nn
+            git -C firmware/hub_infer/components/esp-nn fetch --depth 1 origin 744d48deae6aa4a4d7b93b6a80f548d5298813a4
+            git -C firmware/hub_infer/components/esp-nn checkout 744d48deae6aa4a4d7b93b6a80f548d5298813a4
+            python firmware/tools/patch_deps.py
+          } 2>&1 | tee deps.log
+
+      - name: The dependency fetch's tail, on failure
+        if: failure()
+        run: tail -80 deps.log >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Set up PlatformIO
         # PlatformIO is a pip package; there is no setup action for it.
@@ -71,9 +81,25 @@ jobs:
       # The Arduino core for the node and the wearable.
       - name: Install the Arduino core
         run: |
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core install esp32:esp32@3.3.12
+          set -o pipefail
+          {
+            curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+            arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          } 2>&1 | tee arduino.log
+
+      - name: The Arduino install's tail, on failure
+        if: failure()
+        run: tail -80 arduino.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Rebuild all three units
+        run: |
+          set -o pipefail
+          python firmware/tools/make_prebuilt.py 2>&1 | tee rebuild.log
+
+      - name: The rebuild's tail, on failure
+        if: failure()
+        run: tail -120 rebuild.log >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Rebuild all three units
         run: python firmware/tools/make_prebuilt.py
