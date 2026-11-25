@@ -127,6 +127,23 @@ def draw_pill(d, x, y, label, colour):
     draw_text(d, x + 10, y, label, colour, 1)
 
 
+def draw_wifi(d, cx, base_y, colour):
+    """The wireless mark, mirroring draw_wifi_glyph() in hub_display.c."""
+    fill(d, cx - 1, base_y - 2, 3, 3, colour)
+    for rout in (8, 13):
+        for band in range(2):
+            r = rout - band
+            a = 40
+            while a <= 140:
+                rad = math.radians(a)
+                fx = r * math.cos(rad)
+                fy = r * math.sin(rad)
+                x = cx + int(fx + (0.5 if fx >= 0 else -0.5))
+                y = base_y - int(fy + 0.5)
+                fill(d, x, y, 1, 1, colour)
+                a += 2
+
+
 def level_bar(d, x, y, w, h, level, colour, track, border):
     fill(d, x, y, w, h, track)
     fill_w = int((max(level, 0.0) ** 0.5) * (w - 2) + 0.5)
@@ -170,7 +187,7 @@ def cot_detail(d, x, y, w, cot, known, C):
 
 # ---------------------------------------------------------------- the pages
 def dashboard(path: Path, cots, linked, crying, cot_id, confidence, level,
-              clients, ble_ready, uptime_s, heading=None):
+              clients, ble_ready, uptime_s, heading=None, wifi_up=True):
     """The dashboard, mirroring draw_dashboard() in hub_display.c."""
     C = load_palette()
     L = load_layout()
@@ -190,6 +207,8 @@ def dashboard(path: Path, cots, linked, crying, cot_id, confidence, level,
     fill(d, 0, 0, W, header_h, C["C_HEADER"])
     draw_text(d, 12, 8, "CRYNET", C["C_ACCENT"], 2)
     draw_text(d, 90, 12, "S3 HUB", C["C_DIM"], 1)
+    if wifi_up:
+        draw_wifi(d, 160, 21, C["C_GREEN"])
     draw_pill(d, 196, 11, "NODE",
               C["C_GREEN"] if linked else C["C_AMBER"])
     wearable_col = (C["C_GREEN"] if clients > 0
@@ -380,6 +399,8 @@ def main() -> int:
                   1, 97, 0.284, 1, True, 12 * 60 + 4),
         dashboard(OUT / "ui_dashboard_alert_nophone.png", COTS_CRYING, True,
                   True, 1, 97, 0.284, 0, True, 12 * 60 + 4),
+        dashboard(OUT / "ui_dashboard_nowifi.png", COTS_QUIET, True, False, 0,
+                  0, 0.084, 1, True, 12 * 60 + 4, wifi_up=False),
         splash(OUT / "ui_splash.png"),
         colour_check(OUT / "ui_colour_check.png"),
     ]

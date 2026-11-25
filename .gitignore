@@ -68,5 +68,13 @@ dashboard/*.db
 dashboard/*.db-wal
 dashboard/*.db-shm
 
+# The hub's upload token and the caregiver's login password.  These are
+# the two secrets of the hosted copy (D-97); they live in Cloudflare's
+# secret store and in the hub's own NVS, and nowhere else.  A local
+# copy is kept here so the offline dashboard can be started against the
+# same token without typing it -- but this file is never committed.
+dashboard/.secrets
+dashboard/worker/.dev.vars
+
 # Cloudflare Wrangler local state (local D1 copy and build cache)
 dashboard/.wrangler/

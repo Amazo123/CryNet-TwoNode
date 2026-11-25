@@ -58,6 +58,48 @@ The hub's firmware already trusts the certificate (Cloudflare's edge
 chains to GTS Root R4, which is in the ESP-IDF CA bundle the hub was
 built with), so nothing on the board changes but those two settings.
 
+**Only one address to type.** The hub also reports who is here, and it
+does that to `POST /api/v1/presence` — but that address is *derived*:
+it is the events URL with its last path segment changed. So `net set
+https://…/api/v1/events` is the only address the owner ever types.
+
+### The token, kept off Git
+
+The upload token is a secret and this repository is public, so it is
+**not** in any tracked file. It lives in three places and nowhere else:
+Cloudflare's secret store (`UPLOAD_TOKEN`), the hub's own NVS (set
+once with `net token`), and a local, git-ignored `dashboard/.secrets`
+on the machine that runs the offline copy:
+
+```
+CRYNET_TOKEN=<the UPLOAD_TOKEN value>
+CRYNET_PASSWORD=<the DASHBOARD_PASSWORD value>
+```
+
+That file is what lets the offline dashboard be started against the same
+token without typing it:
+
+```sh
+python dashboard/server.py --token "$(grep CRYNET_TOKEN dashboard/.secrets | cut -d= -f2)"
+```
+
+### One thing to know about Cloudflare and Python
+
+Cloudflare's edge **rejects `Python-urllib` with error 1010** before
+the request reaches the Worker, so a Python script that posts to the
+hosted copy needs its own `User-Agent` header:
+
+```python
+req = urllib.request.Request(url, data=body, method="POST", headers={
+    "Content-Type": "application/json",
+    "X-CryNet-Token": token,
+    "User-Agent": "CryNet-Tools/1.0",     # <- without this: 403
+})
+```
+
+The hub is unaffected: it sends `ESP32 HTTP Client/1.0`, which the
+edge passes.
+
 ## Backups
 
 D1 keeps 7 days of point-in-time history ("Time Travel") on the free

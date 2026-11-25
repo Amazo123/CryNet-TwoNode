@@ -673,22 +673,29 @@ static void draw_signal_bars(int x, int y, int bars)
  * the eye looks first, because that is where the arcs end.  Each arc is
  * two pixels thick, drawn as a pair of radii.
  *
- * The mark is always drawn.  A mark that only appears when the link is
- * up cannot say whether the network is down or the panel is asleep, and
- * the whole point of putting it on the panel is to answer that without
- * the caregiver having to ask a phone.  Green means the hub is on the
- * network; dim grey means it is not, and the records are sitting in the
- * hub's flash until it is. */
+ * The mark is drawn only while the hub is on the network.  A mark that
+ * is always there has to be read to be understood: grey means "not
+ * connected", and that is a second thing to learn beside the two
+ * pills.  With the mark present exactly when it means something, the
+ * panel has one rule -- *a mark here means the hub is on the
+ * network* -- and no other state to confuse it with.  Where the hub
+ * is not on the network, the dashboard says so instead, and there the
+ * question can be asked with room to answer it.
+ *
+ * The flag is the same one the uploader uses to decide whether a
+ * record can leave the hub, so the glass cannot disagree with the
+ * network: the panel shows a mark only when the records are actually
+ * on their way. */
 static void draw_wifi_glyph(int cx, int base_y, uint16_t col)
 {
     /* The router, at the foot of the mark. */
     fb_fill(cx - 1, base_y - 2, 3, 3, col);
 
-    static const int radii[2] = { 6, 10 };
+    static const int radii[2] = { 8, 13 };
     for (int k = 0; k < 2; k++) {
         for (int band = 0; band < 2; band++) {
             const int r = radii[k] - band;
-            for (int a = 35; a <= 145; a += 2) {
+            for (int a = 40; a <= 140; a += 2) {
                 const float rad = (float)a * 0.01745329f;   /* degrees */
                 const float fx = (float)r * cosf(rad);
                 const float fy = (float)r * sinf(rad);
@@ -709,8 +716,12 @@ static void draw_dashboard(const hub_display_state_t *st)
     fb_text(12, 8, "CRYNET", C_ACCENT, 2);
     fb_text(90, 12, "S3 HUB", C_DIM, 1);
     /* The wireless link, between the hub's name and the cot link: the
-     * two things the hub depends on, side by side. */
-    draw_wifi_glyph(160, 20, st->wifi_up ? C_GREEN : C_DIM);
+     * two things the hub depends on, side by side.  It is drawn only
+     * while the hub is on the network, so the rule is one line long:
+     * a mark here means the records are on their way. */
+    if (st->wifi_up) {
+        draw_wifi_glyph(160, 21, C_GREEN);
+    }
     /* The cot link: green while at least one cot is answering, amber
      * once every card has gone quiet.  Amber, not the dim grey the
      * first version used, so both pills read the same way — green is
