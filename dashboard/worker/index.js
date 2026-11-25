@@ -609,14 +609,25 @@ async function buildPresence(db) {
     };
   });
   const r = await db.prepare('SELECT * FROM presence ORDER BY device, cot').all();
-  const nodes = (r.results || []).map((p) => ({
-    device: p.device,
-    cot: p.cot,
-    online: demo.has(p.device) || !!p.online,
-    deaf: !!p.deaf,
-    rssi: p.rssi,
-    at: p.at,
-  }));
+  const nodes = (r.results || []).map((p) => {
+    // A cot is online only while the hub that sees it still is.  The row
+    // is the hub's last word, and `at` says when it was said; on the
+    // same clock the hub itself is judged by, a row the hub has stopped
+    // refreshing goes stale.  Without this, the post a hub made just
+    // before a power cut would hold its cots "online" for ever -- the
+    // hub reads as gone while the cots read as watched, which is the
+    // one lie this panel must not tell (D-108).
+    const at = Number(p.at) || 0;
+    const fresh = at > 0 && now - at <= PRESENCE_STALE_S;
+    return {
+      device: p.device,
+      cot: p.cot,
+      online: demo.has(p.device) || (!!p.online && fresh),
+      deaf: !!p.deaf,
+      rssi: p.rssi,
+      at: p.at,
+    };
+  });
   return { now, hubs, nodes };
 }
 

@@ -411,10 +411,18 @@ def build_presence(store: Store) -> dict:
     nodes = []
     for p in store.presence_rows():
         is_demo = p.get("device") in demo
+        # A cot is online only while the hub that sees it still is: the
+        # row is the hub's last word, and `at` says when it was said.  On
+        # the same clock the hub itself is judged by, a row the hub has
+        # stopped refreshing goes stale -- otherwise the post a hub made
+        # just before a power cut would hold its cots "online" for ever
+        # (D-108).
+        at = int(p.get("at") or 0)
+        fresh = at > 0 and (now - at) <= PRESENCE_STALE_S
         nodes.append({
             "device": p.get("device"),
             "cot": p.get("cot"),
-            "online": is_demo or bool(p.get("online")),
+            "online": is_demo or (bool(p.get("online")) and fresh),
             "deaf": bool(p.get("deaf")),
             "rssi": p.get("rssi"),
             "at": p.get("at"),

@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -228,6 +229,53 @@ def main() -> int:
         if not any((x.get("device") if isinstance(x, dict) else x) == device
                    for x in names):
             failures.append(f"{device} is not in the device list")
+
+        # The hub's other post: the presence, which says who is here.
+        # The body is build_presence() in crynet_net.c, byte for byte,
+        # the same way hub_body() above is build_batch().
+        pres = ('{"device":"%s","hub":{"fw":"%s","name":"%s"},'
+                '"nodes":[{"cot":1,"online":true,"deaf":false,"rssi":-58},'
+                '{"cot":2,"online":true,"deaf":false,"rssi":-61}]}'
+                % (device, FW_VERSION, "Nursery hub"))
+        json.loads(pres)                     # as the record body was checked
+        ans = post(base + "/api/v1/presence", pres, args.token)
+        if ans.get("cots") != 2:
+            failures.append(f"the presence post stored {ans.get('cots')} of 2 cots")
+        print(f"  posted presence -> {ans}")
+
+        p = get(base + "/api/v1/presence")
+        mine = next((h for h in p.get("hubs", []) if h["device"] == device), {})
+        cots = {n["cot"]: n for n in p.get("nodes", []) if n["device"] == device}
+        if not mine.get("online"):
+            failures.append("the hub that just posted reads offline")
+        online = sorted(c for c in cots if cots[c]["online"])
+        if online != [1, 2]:
+            failures.append(f"the cots the hub just reported online read "
+                            f"{online}, expected [1, 2]")
+        print("  read back -> hub online, cot 1 and cot 2 online with it")
+
+        # Then the power is pulled the only way a test can pull it: the
+        # clock is moved past the staleness window.  The hub must read as
+        # gone -- and so must its cots, which before D-108 stayed online
+        # for ever on the last post the hub ever made.  (Needs the
+        # throwaway server; a dashboard we were pointed at is left alone.)
+        if tmp is not None:
+            conn = sqlite3.connect(str(db), timeout=5)
+            with conn:
+                conn.execute("UPDATE devices SET last_seen = last_seen - 600")
+                conn.execute("UPDATE presence SET at = at - 600")
+            conn.close()
+            p = get(base + "/api/v1/presence")
+            mine = next((h for h in p.get("hubs", []) if h["device"] == device), {})
+            cots = {n["cot"]: n for n in p.get("nodes", []) if n["device"] == device}
+            if mine.get("online"):
+                failures.append("the hub still reads online ten minutes after "
+                                "its last word")
+            still = sorted(c for c in cots if cots[c]["online"])
+            if still:
+                failures.append(f"cots {still} read online long after the hub "
+                                f"that sees them stopped speaking (D-108)")
+            print("  aged 10 min -> hub offline, and both cots offline with it")
 
     finally:
         if proc is not None:
