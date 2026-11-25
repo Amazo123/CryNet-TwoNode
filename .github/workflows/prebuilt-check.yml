@@ -51,6 +51,34 @@ jobs:
       # tees its output to a file, and a companion step appends the tail
       # of that file to the summary -- so the actual error is readable
       # from the run page without an account.
+      - name: Set up PlatformIO
+        # PlatformIO is a pip package; there is no setup action for it.
+        # (The action this step once named, pioarduino/setup-pio@v2,
+        # does not exist -- the build job failed at "Set up job" on every
+        # run from 2026-11-07 until this line.  The freshness job above
+        # was passing the whole time; the red runs were this.)
+        run: |
+          set -o pipefail
+          pip install platformio==6.2.0 2>&1 | tee pio.log
+
+      - name: The PlatformIO install's tail, on failure
+        if: failure()
+        run: tail -80 pio.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      # The Arduino core for the node and the wearable.
+      - name: Install the Arduino core
+        run: |
+          set -o pipefail
+          {
+            curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+            arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          } 2>&1 | tee arduino.log
+
+      - name: The Arduino install's tail, on failure
+        if: failure()
+        run: tail -80 arduino.log >> "$GITHUB_STEP_SUMMARY" || true
+
       - name: Fetch the vendored firmware dependencies
         run: |
           set -o pipefail
@@ -70,28 +98,6 @@ jobs:
         if: failure()
         run: tail -80 deps.log >> "$GITHUB_STEP_SUMMARY" || true
 
-      - name: Set up PlatformIO
-        # PlatformIO is a pip package; there is no setup action for it.
-        # (The action this step once named, pioarduino/setup-pio@v2,
-        # does not exist -- the build job failed at "Set up job" on every
-        # run from 2026-11-07 until this line.  The freshness job above
-        # was passing the whole time; the red runs were this.)
-        run: pip install platformio==6.2.0
-
-      # The Arduino core for the node and the wearable.
-      - name: Install the Arduino core
-        run: |
-          set -o pipefail
-          {
-            curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-            arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-            arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          } 2>&1 | tee arduino.log
-
-      - name: The Arduino install's tail, on failure
-        if: failure()
-        run: tail -80 arduino.log >> "$GITHUB_STEP_SUMMARY" || true
-
       - name: Rebuild all three units
         run: |
           set -o pipefail
@@ -100,9 +106,6 @@ jobs:
       - name: The rebuild's tail, on failure
         if: failure()
         run: tail -120 rebuild.log >> "$GITHUB_STEP_SUMMARY" || true
-
-      - name: Rebuild all three units
-        run: python firmware/tools/make_prebuilt.py
 
       # Two different failures, and they must not be confused:
       #
@@ -115,36 +118,68 @@ jobs:
       #     behaviour.  Report it, do not fail the build for it.
       - name: Compare the rebuild with what is committed
         run: |
-          set -u
-          SOURCE_CHANGED=0
-          IMAGES_CHANGED=0
+          set -u -o pipefail
+          {
+            SOURCE_CHANGED=0
+            IMAGES_CHANGED=0
 
-          if ! git diff --quiet -- firmware/hub_infer firmware/node firmware/wearable \
-                            firmware/tools/fetch_deps.sh firmware/tools/patch_deps.py; then
-            SOURCE_CHANGED=1
-          fi
-          if ! git diff --quiet -- firmware/prebuilt; then
-            IMAGES_CHANGED=1
-          fi
+            if ! git diff --quiet -- firmware/hub_infer firmware/node firmware/wearable \
+                              firmware/tools/fetch_deps.sh firmware/tools/patch_deps.py; then
+              SOURCE_CHANGED=1
+            fi
+            if ! git diff --quiet -- firmware/prebuilt; then
+              IMAGES_CHANGED=1
+            fi
 
-          echo "source changed: $SOURCE_CHANGED   images changed: $IMAGES_CHANGED"
+            echo "source changed: $SOURCE_CHANGED   images changed: $IMAGES_CHANGED"
 
-          if [ "$SOURCE_CHANGED" = "1" ] && [ "$IMAGES_CHANGED" = "0" ]; then
-            echo ""
-            echo "::error::The firmware source changed but the offline flash images did not."
-            echo "Run:  python firmware/tools/make_prebuilt.py"
-            echo "and commit firmware/prebuilt/ as well."
-            exit 1
-          fi
+            if [ "$SOURCE_CHANGED" = "1" ] && [ "$IMAGES_CHANGED" = "0" ]; then
+              echo ""
+              echo "::error::The firmware source changed but the offline flash images did not."
+              echo "Run:  python firmware/tools/make_prebuilt.py"
+              echo "and commit firmware/prebuilt/ as well."
+              exit 1
+            fi
 
-          if [ "$IMAGES_CHANGED" = "1" ] && [ "$SOURCE_CHANGED" = "0" ]; then
-            echo ""
-            echo "::notice::The rebuild differs from the committed images although the"
-            echo "source did not change.  That is normally a build stamp or a path in"
-            echo "the image, not a behaviour change.  The images still match the"
-            echo "source -- the freshness job is the one that decides that."
-            git diff --stat -- firmware/prebuilt
-          fi
+            if [ "$IMAGES_CHANGED" = "1" ] && [ "$SOURCE_CHANGED" = "0" ]; then
+              echo ""
+              echo "::notice::The rebuild differs from the committed images although the"
+              echo "source did not change.  That is normally a build stamp or a path in"
+              echo "the image, not a behaviour change.  The images still match the"
+              echo "source -- the freshness job is the one that decides that."
+              git diff --stat -- firmware/prebuilt
+            fi
+          } 2>&1 | tee compare.log
+
+      - name: The compare's tail, on failure
+        if: failure()
+        run: tail -80 compare.log >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: The rebuilt images match their own record
-        run: python firmware/tools/check_prebuilt.py
+        run: |
+          set -o pipefail
+          python firmware/tools/check_prebuilt.py 2>&1 | tee final_check.log
+
+      - name: The final check's tail, on failure
+        if: failure()
+        run: tail -80 final_check.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      # If the job still fails and none of the tails above appeared, this
+      # step says which logs were even created -- that names the stage the
+      # failure died in, from the public summary alone.
+      - name: Which logs exist, on failure
+        if: failure()
+        run: |
+          {
+            echo "---"
+            echo "Job failed.  The failing step's own tail should be above."
+            echo "If no tail is above, the failure was in checkout or setup-python."
+            echo "Logs that were created (with each one's last line):"
+            for f in pio.log arduino.log deps.log rebuild.log compare.log final_check.log; do
+              if [ -f "$f" ]; then
+                echo "  $f -- last line: $(tail -1 "$f" | cut -c1-140)"
+              else
+                echo "  $f -- never created"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
