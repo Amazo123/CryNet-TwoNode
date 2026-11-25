@@ -78,6 +78,17 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
             arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
             arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+            # The wearable sketch drives its OLED through Adafruit's SSD1306
+            # library.  On the machine the shipped images were built on these
+            # come with the Arduino IDE; a bare runner does not have them --
+            # this was the failure every build run died on (run #9 through
+            # #12, all at the wearable compile, "Adafruit_GFX.h: No such
+            # file").  Pinned to the versions on that machine so the CI
+            # rebuild matches what the images were made with.
+            arduino-cli lib install \
+              "Adafruit SSD1306@2.5.17" \
+              "Adafruit GFX Library@1.13.0" \
+              "Adafruit BusIO@1.17.4"
           } 2>&1 | tee arduino.log
 
       - name: The Arduino install's tail, on failure
