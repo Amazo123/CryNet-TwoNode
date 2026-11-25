@@ -88,6 +88,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def git_describe() -> str | None:
+    """The version string the build should have baked into its banner.
+
+    ESP-IDF bakes the app version and the compile time at configure time,
+    so an incremental build can wear a banner from an older git state
+    (D-106).  None means git is unavailable -- the check then skips.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--always", "--tags", "--dirty"],
+            cwd=ROOT, capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.decode().strip() or None
+
+
 def build_hub() -> int:
     pio = find_platformio()
     if pio is None:
@@ -101,11 +119,29 @@ def build_hub() -> int:
                   f"`bash firmware/tools/fetch_deps.sh` once (needs network)",
                   file=sys.stderr)
             return 1
+    # ESP-IDF bakes the app version and the compile time at configure time,
+    # and an incremental build happily reuses a configure from an older git
+    # state -- the unit then wears a banner that lies about which build it
+    # runs (D-106).  Touching CMakeLists forces the reconfigure that
+    # regenerates the stamp; the check below refuses an image that does not
+    # carry it.
+    cmake = project / "CMakeLists.txt"
+    if cmake.is_file():
+        os.utime(cmake, None)
     print("building the hub with PlatformIO (this takes a few minutes) ...")
     rc = subprocess.run([pio, "run"], cwd=project).returncode
     if rc != 0:
         return rc
     built = project / ".pio" / "build" / "esp32s3"
+    want = git_describe()
+    if want:
+        base = want.removesuffix("-dirty")
+        if base.encode() not in (built / "firmware.bin").read_bytes():
+            print("the built firmware.bin does not carry the current app "
+                  f"version ({want}) -- the build kept a stale configure's "
+                  "banner.  Delete firmware/hub_infer/.pio/build, build "
+                  "again, then package.", file=sys.stderr)
+            return 1
     out = PREBUILT / "hub"
     out.mkdir(parents=True, exist_ok=True)
     for name in ("bootloader.bin", "partitions.bin", "firmware.bin"):

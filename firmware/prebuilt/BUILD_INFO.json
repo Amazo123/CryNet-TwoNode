@@ -98,7 +98,7 @@
       "source_fingerprint": "e309ef595377796b8c92c5beb45b973cb2e13cfa127abb6370da6a09a1491dc7",
       "images": {
         "bootloader.bin": "aefe21ad9f40735b7ebc07c2b6ad3eeb440477baed575bfc205f78a043c6282e",
-        "firmware.bin": "ae661b3d7fe3a092eda4400932f4a1ff713c77f6093eb26dfbbf4e86688eb4e5",
+        "firmware.bin": "cd126d90d16bfb51a01b4f34a4a8f605386bb824463642ea39862e7a45477ca2",
         "partitions.bin": "463793a642ab4a905bd6b4c0b07c749d4ba199ef459b0a91450ca21c0cd581d4"
       }
     },
