@@ -39,6 +39,11 @@ jobs:
   build:
     name: the source still builds, and the images are what it produces
     runs-on: ubuntu-latest
+    # contents: write exists so that, on failure, the job can push the log
+    # tails to the ci-diagnostics branch -- a channel readable by anyone
+    # with git, unlike the run summary (which needs a signed-in session).
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -167,6 +172,44 @@ jobs:
       # If the job still fails and none of the tails above appeared, this
       # step says which logs were even created -- that names the stage the
       # failure died in, from the public summary alone.
+      # The run summary is only fully readable signed in.  This branch is
+      # readable by anyone with git.  On failure the job force-pushes every
+      # log's tail to `ci-diagnostics`, so the actual error leaves the
+      # runner even when nobody is watching the run page from an account.
+      # The branch never triggers this workflow (push fires only for main
+      # and feature/offline-flashing), and the step is allowed to fail --
+      # it must not mask the real fault above it.
+      - name: Publish the logs to the ci-diagnostics branch
+        if: failure()
+        continue-on-error: true
+        run: |
+          {
+            echo "# build-job failure diagnostics"
+            echo "run ${{ github.run_id }}, commit ${{ github.sha }}"
+            echo
+            for f in pio.log arduino.log deps.log rebuild.log compare.log final_check.log; do
+              if [ -f "$f" ]; then
+                echo "## $f (last 200 lines)"
+                echo '```'
+                tail -200 "$f"
+                echo '```'
+              else
+                echo "## $f -- never created"
+              fi
+            done
+            echo "## the tree after the run"
+            echo '```'
+            git status --porcelain | head -50
+            git diff --stat | tail -20
+            echo '```'
+          } > diag.md
+          git config user.name "ci-diagnostics"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout -B ci-diagnostics
+          git add diag.md
+          git commit -m "CI diagnostics for run ${{ github.run_id }}"
+          git push origin ci-diagnostics --force
+
       - name: Which logs exist, on failure
         if: failure()
         run: |
