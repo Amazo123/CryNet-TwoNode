@@ -61,9 +61,12 @@ jobs:
           python firmware/tools/patch_deps.py
 
       - name: Set up PlatformIO
-        uses: pioarduino/setup-pio@v2
-        with:
-          pio-version: 6.2.0
+        # PlatformIO is a pip package; there is no setup action for it.
+        # (The action this step once named, pioarduino/setup-pio@v2,
+        # does not exist -- the build job failed at "Set up job" on every
+        # run from 2026-11-07 until this line.  The freshness job above
+        # was passing the whole time; the red runs were this.)
+        run: pip install platformio==6.2.0
 
       # The Arduino core for the node and the wearable.
       - name: Install the Arduino core
