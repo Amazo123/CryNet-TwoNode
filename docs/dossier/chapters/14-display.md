@@ -1,4 +1,4 @@
-# Chapter 13 — The hub panel: driver, UI, and five debugging rounds
+# Chapter 14 — The hub panel: driver, UI, and five debugging rounds
 
 ## Why a panel at all
 
@@ -238,6 +238,23 @@ is backwards: the eye should be drawn to what is alive.
 Round 4 added the `PHONE` pill and, under a confirmed cry with nobody attached, the words
 **`ALERT NOT DELIVERED`**. A cry the system detected but could not hand to a human is not a success,
 and the panel says so.
+
+### The wireless mark, drawn only when it means something
+
+The header carries a wireless mark — two arcs over a dot, the shape every phone shows for a
+connection — and it is drawn **only while the hub is on the network** (D-100, redrawn in D-103):
+green when it is, and *nothing at all* when it is not. A first version drew both states, green and
+dim grey, and that was rejected on a principle the rest of the panel already follows: a mark that
+is always there has to be read to be understood. With the mark present exactly when it means
+something, the panel has one rule — *a mark here means the hub is on the network* — and no second
+state to learn. Where the hub is offline, the dashboard says so instead; there the question has
+room to be answered.
+
+Two implementation details were not obvious. The arcs are **walked by angle, not by column** — a
+column-by-column walk of a shallow arc leaves gaps at the sides, and the sides are where the eye
+looks first. And the flag that draws it is **the same one the uploader consults** before sending a
+record, so the glass cannot disagree with the network: the panel shows a mark only when the records
+are actually on their way (Chapter 12).
 
 ## The rounded corners, and a host-side regression check
 

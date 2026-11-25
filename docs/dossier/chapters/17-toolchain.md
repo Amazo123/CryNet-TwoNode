@@ -1,4 +1,4 @@
-# Chapter 16 — Toolchain: what was installed, what broke, and why it is pinned
+# Chapter 17 — Toolchain: what was installed, what broke, and why it is pinned
 
 ## The starting point
 
@@ -98,8 +98,8 @@ option, not a convenience — it exists so a board can be brought up on a machin
 this project, with no Arduino core, no PlatformIO, no ESP-IDF and no network.
 
 What stops it going stale is `BUILD_INFO.json`, which records the SHA-256 of every source file that
-went into each image, and `check_prebuilt.py`, which recomputes them. Chapter 17 has the details;
-Chapter 19 has the commands.
+went into each image, and `check_prebuilt.py`, which recomputes them. Chapter 18 has the details;
+Chapter 20 has the commands.
 
 Two firmwares, two toolchains — ESP-IDF for the hub (because NimBLE, coexistence and PSRAM need
 `sdkconfig`) and Arduino for the two C3 units (because they are simple and the core is already

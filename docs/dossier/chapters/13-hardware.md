@@ -1,4 +1,4 @@
-# Chapter 12 — Hardware: wiring, bill of materials, power and the haptic drive
+# Chapter 13 — Hardware: wiring, bill of materials, power and the haptic drive
 
 ## The four boards and their pins
 

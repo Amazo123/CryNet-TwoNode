@@ -1,4 +1,4 @@
-# Chapter 19 — Replication: building the whole thing from an empty checkout
+# Chapter 20 — Replication: building the whole thing from an empty checkout
 
 ## The rule that makes this chapter possible
 
@@ -25,7 +25,7 @@ the built images for all three roles, with a SHA-256 manifest and a source-finge
 §7.4.
 
 What the repository is **not** enough for is **retraining**. The training run needs a GPU and the
-corpora, and that is a separate, optional path — given in §11 below.
+corpora, and that is a separate, optional path — given in §12 below.
 
 The corollary matters for the defence: **the model is a committed, hash-identified artifact**, not a
 result someone has to trust. `deploy_config.json` carries the SHA-256, and
@@ -49,7 +49,7 @@ evaluation scripts scored.
 | 2 × ESP32-C3 **Pro Mini** + INMP441 | the cot nodes | the bench |
 | 1 × ESP32-C3 SuperMini + SSD1306 + coin ERM | the wearable | the bench |
 
-**Versions that are known to work together** (Chapter 16):
+**Versions that are known to work together** (Chapter 17):
 
 ```
 Python 3.11.9 · TensorFlow 2.21.0 (CPU) · librosa 0.11.0 · soundfile 0.14.0
@@ -429,7 +429,7 @@ plus `front end 48.2 ms, inference 103.5 ms` and a clean radio counter line.
 
 **If the probes fail, nothing else starts.** The hub deliberately refuses to bring up the radio,
 Bluetooth or the display if the probes fail — a wrong answer is worse than no answer. The two
-static-assert failures you will meet here are described in §12.
+static-assert failures you will meet here are described in §13.
 
 ### 8.2 The node's audio path
 
@@ -481,7 +481,7 @@ ALERT {'cot': 1, 'alert': 'cry', 'confidence_pct': 100}
 
 ### 8.5 The full demonstration
 
-`DEMO_RUNBOOK.md` is the procedure, and [Chapter 15](#chapter-15) explains it in full:
+`DEMO_RUNBOOK.md` is the procedure, and [Chapter 16](#chapter-16) explains it in full:
 the phone 15 cm from the mic, **one** play, let the whole 5-second clip run out, wait 5 s, read
 the log, wait 10 s so the 8-second hold clears before the next cot. After the last cot, wait 10
 seconds of quiet and check that **nothing announces**.
@@ -564,7 +564,64 @@ python build_font.py           # regenerates the panel's font table
 
 ---
 
-## 10. Reproduce the hardware documents
+## 10. Bring up the dashboard
+
+The dashboard is two copies of one service. Either is optional — the hub records whether or not
+either exists — but a full reproduction includes one of them.
+
+### The offline copy (no account, no dependencies)
+
+```bash
+python dashboard/server.py                       # http://localhost:8787
+python dashboard/server.py --port 8787 --token SECRET   # require the hub's token
+```
+
+Python's standard library and SQLite; the database is one file. Open the page, and point the hub at
+it (below).
+
+### The hosted copy (Cloudflare Workers + D1)
+
+The full procedure is `dashboard/worker/README.md`. In outline:
+
+```bash
+cd dashboard
+npx wrangler d1 execute crynet --remote --file schema.sql   # the tables, once
+npx wrangler secret put UPLOAD_TOKEN                        # the hub's X-CryNet-Token
+npx wrangler secret put DASHBOARD_PASSWORD                  # the caregiver's login
+npx wrangler deploy
+```
+
+Both secrets live only in Cloudflare's store (and, locally, in a git-ignored `.secrets`); neither is
+in the repository, and this dossier does not print them.
+
+### Introduce the hub to it
+
+The router's **2.4 GHz channel must be 6** — the cot link's channel is fixed, and the hub drops a
+network that would move the radio off it. Then, on the hub's serial console:
+
+```
+net ssid <ssid> <password>
+net set <url>          e.g. http://192.168.1.50:8787/api/v1/events, or the Worker's /api/v1/events
+net token <token>      the same secret the service holds
+upload                 send what has already been recorded
+```
+
+**Expected:** `net` reports batches and no failures; the page shows the hub online within ~30 s and
+its cots with it; a cot unplugged reads offline in about two minutes (30 s report, 90 s staleness,
+10 s poll — D-105); a hub unplugged takes its cots offline **with it** (D-108).
+
+### Prove the contract
+
+```bash
+python firmware/tools/test_dashboard_contract.py            # throwaway server, no hardware
+python firmware/tools/test_log_order.py                     # the uploader's ordering rule, on the host
+```
+
+and, on the hub itself, `logtest` — the same ordering proof against the real component on the chip.
+
+---
+
+## 11. Reproduce the hardware documents
 
 ```bash
 cd tools/wiring
@@ -578,7 +635,7 @@ generator, not to the PDF.
 
 ---
 
-## 11. Reproduce the *training* — the optional path
+## 12. Reproduce the *training* — the optional path
 
 This is the only part that needs a GPU and the corpora. It is **not** needed to build or flash the
 system; it is needed to produce a *different* model.
@@ -651,7 +708,7 @@ numbers instead of hope.
 
 ---
 
-## 12. The traps, and what each one looks like
+## 13. The traps, and what each one looks like
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -663,13 +720,16 @@ numbers instead of hope.
 | The serial console never appears | **USB CDC on boot** is off in the board options | Enable it, or the sketch's logs go nowhere |
 | The node's trigger stops working after an edit | The Arduino TX timeout (I-11) | Keep `Serial.setTxTimeoutMs(0)` |
 | A stale model compiles into the firmware | The notebook re-derives the threshold and the scales every run | `check_artifact_drift.py` **before** the build — §4 |
-| The panel shows static / is rotated / has red and blue swapped / has hearts for letters | I-30, I-31, I-35, I-33 | Chapter 13, rounds 1–4 |
+| The panel shows static / is rotated / has red and blue swapped / has hearts for letters | I-30, I-31, I-35, I-33 | Chapter 14, rounds 1–4 |
 | The rounded corners are wrong | I-39 | `python check_corners.py` |
 | The hub asks for audio 5–11 times a minute in a quiet room | The adaptive trigger's 3× floor (D-63) | Expected; the hub then answers "no cry" on every window. Measured: **32 verdicts, 0 false alerts** |
+| The hub joins nothing; `net` says the channel is wrong | The router is not on **channel 6** and the hub refused it on purpose | Set the router's 2.4 GHz channel to 6; the hub reconnects on its own |
+| The dashboard shows the hub offline but the cots online | The old staleness bug (D-108) | Fixed in both copies of the service; the contract test holds the rule |
+| Uploads answer 401 | The hub's token and the service's `UPLOAD_TOKEN` disagree | `net token <t>` on the hub, or `npx wrangler secret put UPLOAD_TOKEN`; both ends must hold the same value |
 
 ---
 
-## 13. The time and disk budget
+## 14. The time and disk budget
 
 | Stage | Wall time | Notes |
 |---|---|---|
@@ -678,6 +738,7 @@ numbers instead of hope.
 | Node / wearable build | ~1 min each | Arduino CLI |
 | Flash + boot log | ~1 min | |
 | Host-side checks (§9) | 10–30 min | `run_real_fast.sh` is the slow one |
+| Dashboard bring-up | ~5 min | §10; the offline copy is one command |
 | The full Kaggle training run | 45–90 min | GPU; optional |
 | The confusion session | ~30 min | nine takes plus the labelling |
 | **This dossier** | ~1 min | `python docs/dossier/build.py` |
@@ -687,7 +748,7 @@ Disk: the toolchain is ~2 GB, the corpora are 4.6 GB (cacheable), the repository
 
 ---
 
-## 14. The checklist
+## 15. The checklist
 
 Print this. Tick it. You have reproduced the project.
 
@@ -697,6 +758,8 @@ Print this. Tick it. You have reproduced the project.
 - [ ] `python firmware/tools/check_artifact_drift.py` → **PASS**
 - [ ] `python firmware/tools/check_prebuilt.py` → the offline images are **up to date with the source**
 - [ ] `python -m platformio run` → the hub builds
+- [ ] `python firmware/tools/test_dashboard_contract.py` → **OK** (Chapter 12's contract holds)
+- [ ] `python firmware/tools/test_log_order.py` → all six tests **pass**
 - [ ] `arduino-cli compile --fqbn esp32:esp32:weact_studio_esp32c3 …` → the node and the wearable build
 - [ ] The hub flashes, boots, and prints `RESULT: PASS — 4 probes, 5184/5184 features exact`
 - [ ] Each cot's id is set (`id 1`, `id 2`) and **still set after the flash**

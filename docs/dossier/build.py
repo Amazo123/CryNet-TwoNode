@@ -552,10 +552,11 @@ def main() -> int:
             "Appendix B &mdash; Complete first-party source listings",
             "appendix-b",
             "Every line of first-party code in the system, with line numbers, "
-            "reproduced verbatim from the working tree: the hub's seven components "
+            "reproduced verbatim from the working tree: the hub's ten components "
             "and its application, the cot node sketch, the wearable sketch and the "
             "motor's bench sketch, the training pipeline, the evaluation scripts, "
-            "the host tools and the record that guards the shipped offline images. "
+            "the host tools, the dashboard (the offline service, the page and the "
+            "hosted Worker) and the record that guards the shipped offline images. "
             "Third-party code (TensorFlow Lite Micro, ESP-NN, NimBLE, ESP-IDF, "
             "Arduino) is not reproduced &mdash; it is fetched by the build. "
             "The 8,604-line generated model array "
@@ -590,7 +591,7 @@ def main() -> int:
         npages = doc.page_count
         doc.close()
 
-        filled = re.sub(r"@@([a-z0-9-]+)@@",
+        filled = re.sub(r"@@(.+?)@@",
                         lambda m: str(pages.get(m.group(1), "")), page)
         if filled != page:
             page = filled

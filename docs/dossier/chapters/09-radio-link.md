@@ -176,7 +176,7 @@ The burst-time policy is *slow*, not *silent*, and the reason is a measurement f
 busiest session recorded the radio was busy **89 % of the time** — 230 s of burst airtime in a 260 s
 session — so a wearable waiting for a gap could take **a minute to attach**. (That session is the
 upper bound on airtime, not the two-cot steady state; it has not been re-measured with exactly two
-cots transmitting, and Chapter 18 says so.) An advertisement every 320 ms costs the burst a frame or two, and the
+cots transmitting, and Chapter 19 says so.) An advertisement every 320 ms costs the burst a frame or two, and the
 resend path recovers them; silence cost the caregiver the device altogether. That is the trade stated
 plainly, and it is the right way round — a slightly slower burst is a nuisance, an unattachable
 wearable is a failure.

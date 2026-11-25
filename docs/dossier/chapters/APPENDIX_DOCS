@@ -16,6 +16,10 @@ TWO_COT_README.md
 firmware/README.md
 firmware/node/README.md
 research/README.md
+# The dashboard (Chapter 12)
+dashboard/README.md
+dashboard/API.md
+dashboard/worker/README.md
 # Flashing, including the offline route
 FLASHING.md
 GETTING_STARTED_FLASHING.md

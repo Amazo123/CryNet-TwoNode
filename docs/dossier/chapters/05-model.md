@@ -263,7 +263,7 @@ OK  artifacts, firmware constants and deploy_config all agree
 ```
 
 A defence that quotes a hash must quote **that** one. The stale `4aef55d8…` in the decision log is
-recorded as an open documentary item in Chapter 18.
+recorded as an open documentary item in Chapter 19.
 
 ### Against the deployed INT8 model, on real audio
 

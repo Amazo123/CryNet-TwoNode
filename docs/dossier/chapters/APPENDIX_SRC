@@ -30,6 +30,13 @@ firmware/hub_infer/src/link_stage.c
 # Hub - Bluetooth
 firmware/hub_infer/components/ble_alert/include/ble_alert.h
 firmware/hub_infer/components/ble_alert/ble_alert.c
+# Hub - the cry log, the clock, and the network (Chapter 12)
+firmware/hub_infer/components/crynet_log/include/crynet_log.h
+firmware/hub_infer/components/crynet_log/crynet_log.c
+firmware/hub_infer/components/crynet_clock/include/crynet_clock.h
+firmware/hub_infer/components/crynet_clock/crynet_clock.c
+firmware/hub_infer/components/crynet_net/include/crynet_net.h
+firmware/hub_infer/components/crynet_net/crynet_net.c
 # Hub - the panel
 firmware/hub_infer/components/hub_display/include/hub_display.h
 firmware/hub_infer/components/hub_display/ili9341.h
@@ -78,6 +85,7 @@ firmware/tools/check_artifact_drift.py
 firmware/tools/check_prebuilt.py
 firmware/tools/make_prebuilt.py
 firmware/tools/prebuilt_lib.py
+firmware/tools/hub_console.py
 firmware/tools/gen_probe_refs.py
 firmware/tools/listen_hub.py
 firmware/tools/listen_node.py
@@ -97,6 +105,16 @@ firmware/tools/serve_alert_page.py
 firmware/tools/who_is_who.py
 firmware/tools/patch_deps.py
 firmware/tools/fetch_deps.sh
+# The record's proofs, and the dashboard's contract
+firmware/tools/test_log_order.py
+firmware/tools/test_dashboard_contract.py
+# The dashboard: the offline copy, the page, and the hosted Worker
+dashboard/server.py
+dashboard/web/index.html
+dashboard/web/style.css
+dashboard/web/app.js
+dashboard/worker/index.js
+dashboard/worker/schema.sql
 # The shipped offline images, and the record that guards them
 firmware/prebuilt/SHA256SUMS
 firmware/prebuilt/BUILD_INFO.json

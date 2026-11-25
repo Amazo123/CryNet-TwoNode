@@ -1,4 +1,4 @@
-# Chapter 20 — Glossary
+# Chapter 21 — Glossary
 
 Every term a defender might be asked about, defined once. Where a term has a project-specific
 meaning that differs from its ordinary one, that is stated.
@@ -40,6 +40,10 @@ crest of 2.2–2.9; the loud music that used to false-alarm had 5.6; the loudest
 a **low-side switch**: the motor's + lead goes to 3.3 V through a 22 Ω stall cap, and the
 transistor pulls the motor's − lead to ground.
 
+**Basic auth** — how the caregiver's browser authenticates to the dashboard: a username and
+password, separate from the hub's upload token on purpose — a leaked password only reads the
+record; a leaked token writes to it (Chapter 12).
+
 **BLE** — Bluetooth Low Energy. The hub is a **peripheral and broadcaster** (never a central); the
 wearable is the client.
 
@@ -73,14 +77,22 @@ size 2 (96 px) because size 3 would be 144 px on a 128 px glass. One cot still r
 again until the room goes quiet (`g_rms < 0.01f && g_loud_streak == 0`), unless a much louder
 sound arrives (`g_rms >= 3.0f * g_frozen_rms`).
 
+**Cry log** — the hub's record of every event, thirty-two bytes per record in six megabytes of
+SPIFFS reserved for it from the first build. Written whether or not there is a network; uploaded in
+batches when there is. Its record numbers are what the wrist's alert shows and what the dashboard
+stores (Chapter 12).
+
 ---
 
 ## D
 
-**D-n** — a **decision** in `DECISIONS.md`: what was decided, why, and what it cost. **87 decision
-rows** numbered D-1…D-86, carrying **85 distinct numbers**: D-51 and D-52 were each used twice for
-different decisions, and D-70 was skipped. All 87 are in this repository's file and reproduced in
-Appendix A.
+**D-n** — a **decision** in `DECISIONS.md`: what was decided, why, and what it cost. **108 decision
+rows** numbered D-1…D-108, carrying **106 distinct numbers**: D-51 and D-52 were each used twice for
+different decisions, and D-70 and D-95 were skipped. All 108 are in this repository's file and
+reproduced in Appendix A.
+
+**D1 (Cloudflare)** — the SQLite database behind the hosted dashboard copy. One Worker, one D1
+database, two secrets; see Chapter 12 and `dashboard/worker/README.md`.
 
 **DIO / QIO** — the two flash access modes. This board **must be booted with DIO**; a QIO image
 watchdog-resets in a loop before the bootloader has configured its own timing. The bootloader
@@ -247,7 +259,7 @@ scaled to `LEVEL_BAR_FULL 0.25`, so the notch and the fill agree by construction
 ## O
 
 **O-n** — an **open item**: work identified and deferred. **O-1…O-9** in `DECISIONS.md`, plus the two-cot
-sub-items **O-1a…O-1g** and **O-10…O-13** discussed in [Chapter 18](#chapter-18). **O-2** (the model has
+sub-items **O-1a…O-1g** and **O-10…O-13** discussed in [Chapter 19](#chapter-19). **O-2** (the model has
 never heard a real infant cry) is the largest, and **O-1d** (no *runtime* has ever been measured, though
 the wearable has run on its pouch) is the largest hardware gap. **O-1b is closed** by D-86; **O-1f** is
 this repo's unflashed D-86 image and **O-1g** the microphone's close-range blind spot.
@@ -265,6 +277,11 @@ relative to its source.
 ---
 
 ## P
+
+**Presence report** — the hub's every-30-second post that says who is in the room: itself, and for
+each cot whether it is answering, deaf, and how strong its radio is. A report yields to a cot's
+burst (up to 20 s), the service calls a hub gone after 90 s without one (D-105), and a cot is online
+only while the hub's word about it is fresh (D-108).
 
 **Pro Mini (ESP32-C3 Pro Mini)** — the board the **two cot nodes** use. Same ESP32-C3 chip, 4 MB
 flash and native USB (`303A:1001`) as the SuperMini, so the firmware image is identical; the swap was
@@ -328,6 +345,14 @@ actually decides refusal is the **peak**, not the RMS (see O-14).
 **SuperMini (ESP32-C3 SuperMini)** — the board the **wearable** uses. It was the original cot-node
 prototype; when the cots moved to Pro Mini stock on 2026-11-02 this board was reassigned to the wrist.
 Same chip and same FQBN as the Pro Mini, which is why one toolchain covers all three C3 units.
+
+**SPIFFS** — the flash file system that holds the cry log, on the six-megabyte `storage` partition
+the partition table reserved from the first build (D-96). Append-only from the log's point of view:
+records are written once and never changed.
+
+**SNTP** — how the hub learns the time when it is on a network. Two servers configured; the wall
+clock is anchored to the hub's monotonic uptime and persisted in NVS, so a restart loses only the
+duration of the power cut (Chapter 12).
 
 **S3 / ESP32-S3** — the hub's MCU: dual-core Xtensa LX7 at 240 MHz, 512 KB SRAM, 8 MB PSRAM,
 16 MB flash.
@@ -402,6 +427,11 @@ and the unit the radio carries.
 
 **Wi-Fi coexistence** — ESP-NOW and BLE share one radio. The hub's Bluetooth is brought up **after**
 the radio, and the advertising interval is throttled during a burst (Chapter 11).
+
+**Watermark** — the number the uploader may claim as sent after a batch: everything up to it has
+gone, nothing above it has. Clamped below the lowest number that did not fit in the batch and the
+lowest number an open episode still holds, so the hub never says "sent" while a record is still
+being measured (D-94).
 
 **WDT / watchdog** — `rst:0x7 TG0WDT_SYS_RST` is the reset reason that identifies a QIO image
 looping on this board.

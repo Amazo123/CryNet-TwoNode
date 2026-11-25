@@ -1,4 +1,4 @@
-# Chapter 17 — The host tools: twenty-six programs that made the firmware debuggable
+# Chapter 18 — The host tools: twenty-nine programs that made the firmware debuggable
 
 ## Why this chapter exists
 
@@ -6,7 +6,7 @@ None of these tools ships in the product. All of them are why the product works.
 system with no host-side instrumentation is a system whose faults can only be guessed at, and almost
 every diagnosis in this dossier was made by a tool in this list.
 
-They live in `firmware/tools/` (**26 Python programs**, plus `fetch_deps.sh`, the PowerShell helpers
+They live in `firmware/tools/` (**29 Python programs**, plus `fetch_deps.sh`, the PowerShell helpers
 and `flash.bat`) and `research/` (the evaluation and analysis scripts). Every one is reproduced in
 full in Appendix B.
 
@@ -58,6 +58,14 @@ already printed its banner, and one dropped byte would otherwise shift every lat
 | **`verify_burst.py`** | Checks the node's audio path end to end: dumps the frozen window and verifies every fragment CRC-16 and the whole-window CRC-32, using `zlib.crc32` on the host. Can write the window as a WAV. |
 | **`check_artifact_drift.py`** | Verifies that `research/out/`, `deploy_config.json` and the staged firmware copies all describe the same model bytes. Run after dropping new Kaggle outputs in and **before** building. Currently **PASS**. |
 | **`gen_probe_refs.py`** | Regenerates `crynet_probe_refs.h` by running the **notebook's own** log-Mel front end, extracted from the notebook. The on-device probes therefore compare against the training pipeline itself, not against a reimplementation of it. |
+
+## The record and the dashboard
+
+| Tool | What it does |
+|---|---|
+| **`hub_console.py`** | A serial console session for the hub's own word list (`status`, `history`, `log`, `net`, `logtest`…) — the network and record configuration of Chapter 12, driven from a PC instead of a bare UART. |
+| **`test_log_order.py`** | The host model of the uploader's ordering rule: the lowest unsent numbers, the clamped watermark, and a companion test that shows the *old* algorithm losing records so the guard cannot silently stop guarding. |
+| **`test_dashboard_contract.py`** | Builds the hub's upload and presence bodies **byte for byte** and proves a running dashboard round-trips them — idempotence, the untimed-record rule, presence freshness. The one contract in the system no compiler checks (Chapter 12). |
 
 ## BLE
 

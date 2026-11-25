@@ -1,4 +1,4 @@
-# Chapter 15 — Bench verification and the demonstration procedure
+# Chapter 16 — Bench verification and the demonstration procedure
 
 ## The distinction that governs all bench work
 
@@ -11,7 +11,7 @@ procedure in this project reads the hub's serial log.
 
 ## Setting up a bench session
 
-1. **Flash all units** (Chapter 19). One command per unit.
+1. **Flash all units** (Chapter 20). One command per unit.
 2. **Open the hub's log** — `firmware/tools/listen_hub.py`, or any serial terminal at 115200.
 3. **Open the node's log** alongside it — `firmware/tools/listen_node.py`. The node's log carries the
    floor, the level and every frozen window's own RMS; without it you cannot tell a trigger problem
@@ -197,7 +197,7 @@ than a demonstration chosen to work.
 `research/CONFUSION_SESSION.md` gives the full procedure: nine one-minute takes with `node_capture` on
 the real INMP441, cut into 5 s clips with a 2.5 s stride, labelled with the session's ground truth via
 `label_session.py --truth` — **not** by loudness. Labelling by loudness would have made the evaluation
-circular. Results in Chapter 14.
+circular. Results in Chapter 15.
 
 ### Burst integrity
 
@@ -214,6 +214,30 @@ the node holds can be compared with what the hub reassembled.
 
 `firmware/tools/check_artifact_drift.py` verifies `research/out/`, `deploy_config.json` and the staged
 firmware copies all describe the same model bytes. Currently **PASS**.
+
+### The dashboard contract
+
+`python firmware/tools/test_dashboard_contract.py` starts a throwaway dashboard, builds the hub's
+upload and presence bodies *byte for byte* from the same fields, posts them, and checks what comes
+back out of the API. It covers the batch idempotence, the untimed-record rule, the presence round
+trip and the staleness rule (D-108). It needs no hardware and is part of the pre-merge battery;
+Chapter 12 explains why this one test exists.
+
+### The cry log's ordering rule
+
+Two proofs, deliberately: `python firmware/tools/test_log_order.py` models the uploader's
+lowest-unsent / clamped-watermark algorithm on the host (six tests including a ten-thousand-case
+soak, plus a companion test that shows the *old* algorithm losing records); and `logtest` on the
+hub's console runs the same scenario against the real component on the real chip, on its own scratch
+file, touching nothing real.
+
+### Presence, on the bench
+
+With the hub on a network, the console's `net` word reports batches, failures and the last error;
+the dashboard's own page answers who is online within about two minutes of the hub being switched
+off (30 s report, 90 s staleness, 10 s poll — D-105). The panel's wireless mark is drawn only while
+the hub is actually on the network (D-103). A clean-power soak — ten minutes, `status` and `net` at
+the ends — is the check that the connectivity stage added no restarts (D-106/D-107).
 
 ### The wearable, without a noise
 

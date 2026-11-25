@@ -3,19 +3,19 @@
 <p class="sub">Infant cry detection for a two-cot ESP32 system &mdash; the complete project dossier</p>
 
 <p class="lede">Everything that was built, measured, decided and shipped: the research that chose the
-corpora, the model that came out of it, the three firmwares, the radio protocol, the wiring, the
-decision record with all eighty-seven entries, the forty-one faults and how each was diagnosed, every
-measured number with the method that produced it, and the exact procedure to rebuild the whole thing
-from an empty checkout.</p>
+corpora, the model that came out of it, the three firmwares, the radio protocol, the cry log and the
+hosted dashboard, the wiring, the decision record with all one hundred and eight entries, the
+forty-one faults and how each was diagnosed, every measured number with the method that produced it,
+and the exact procedure to rebuild the whole thing from an empty checkout.</p>
 
 <table class="meta">
 <tr><td style="width:34%"><strong>Project</strong></td><td>CryNet &mdash; two-cot infant cry monitor</td></tr>
 <tr><td><strong>Repository</strong></td><td><code>C:\Users\HP\.t3\projects\fp-two-node</code></td></tr>
 <tr><td><strong>Remote</strong></td><td><code>origin</code> &rarr; <code>https://github.com/Amazo123/CryNet-TwoNode.git</code></td></tr>
-<tr><td><strong>Head at time of writing</strong></td><td><code>0a82711</code> + D-86 port, on <code>feature/wearable-multi-cot-d86</code></td></tr>
+<tr><td><strong>Head at time of writing</strong></td><td><code>de7bbe6</code>, on <code>main</code>, pushed to GitHub</td></tr>
 <tr><td><strong>System</strong></td><td>2 &times; ESP32-C3 Pro Mini cot nodes &rarr; ESP32-S3 hub &rarr; ESP32-C3 SuperMini wearable</td></tr>
-<tr><td><strong>Dates</strong></td><td>2026-10-28 &rarr; 2026-11-23</td></tr>
-<tr><td><strong>Status</strong></td><td>Four boards verified on the bench; battery runtime unmeasured</td></tr>
+<tr><td><strong>Dates</strong></td><td>2026-10-28 &rarr; 2026-11-25</td></tr>
+<tr><td><strong>Status</strong></td><td>Four boards verified on the bench; hosted dashboard live; battery runtime unmeasured</td></tr>
 <tr><td><strong>Audience</strong></td><td>A reader who must defend every decision and rebuild the system unaided</td></tr>
 </table>
 
@@ -28,7 +28,7 @@ found, what was decided, and exactly what to type to reproduce any of it.</p>
 <p>It is written to be <em>defensible</em>. Every claim carries its evidence &mdash; a file, a line, a
 log, a commit, a measurement &mdash; so that any statement here can be checked rather than believed.
 Where the project does not know something, this document says so; the open items are in
-<a href="#chapter-18">Chapter 18</a>, and they are the honest state of the work, not omissions.</p>
+<a href="#chapter-19">Chapter 19</a>, and they are the honest state of the work, not omissions.</p>
 
 <h2 class="no-break">How it was made</h2>
 
@@ -50,13 +50,13 @@ open item. These identifiers are the project's own, from <code>DECISIONS.md</cod
 <li>File references are <code>path:line</code>; quoted log lines are verbatim.</li>
 <li>Where a figure is a projection rather than a measurement, it says <em>projected</em>. That
 distinction is preserved throughout.</li>
-<li>Two quirks in the record are worth knowing before a defence: <strong>D-51</strong> and
-<strong>D-52</strong> were each used twice, and <strong>D-70</strong> was skipped, so eighty-seven
-decision rows carry eighty-five distinct numbers. Both are in <a href="#chapter-18">Chapter 18</a>;
-neither is a missing decision.</li>
+<li>Quirks in the record worth knowing before a defence: <strong>D-51</strong> and
+<strong>D-52</strong> were each used twice, and <strong>D-70</strong> and <strong>D-95</strong> were
+skipped, so one hundred and eight decision rows carry one hundred and six distinct numbers. These are
+in <a href="#chapter-19">Chapter 19</a>; neither reuse is a missing decision.</li>
 </ul>
 
-<p style="margin-top:8pt" class="small">Generated from the repository at <code>0a82711</code> plus the
-D-86 port, on branch <code>feature/wearable-multi-cot-d86</code>.
+<p style="margin-top:8pt" class="small">Generated from the repository at <code>de7bbe6</code> on
+<code>main</code>.
 Rebuild with <code>python docs/dossier/build.py</code>.</p>
 </div>

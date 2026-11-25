@@ -1,4 +1,4 @@
-# Chapter 18 — Limitations, open items, and what to do next
+# Chapter 19 — Limitations, open items, and what to do next
 
 ## Why this chapter exists
 
@@ -80,7 +80,7 @@ yields the panel's own tone curve instead of a colour choice."
 **Status: still open, but the consequence has shrunk.** The panel's palette was set from the
 colour-check page judged by eye (D-55) and then from a dark-ramp photograph the user read (D-57,
 D-59). The measurement shows this panel *lifts the dark end and lifts the blue channel hardest*,
-and the palette compensates for that deliberately (Chapter 13, Round 5).
+and the palette compensates for that deliberately (Chapter 14, Round 5).
 
 What a lit-room photograph would add is the panel's tone curve — whether the shipped palette is
 correct in a lit room, not only on a dark one. It is a one-minute job with a camera and it is the
@@ -183,7 +183,7 @@ and the phone-played cry — has not been recorded."
 
 **Status: closed by D-60.** Nine one-minute takes on the real INMP441, labelled by the session's
 ground truth rather than by loudness, cut into 5 s clips with a 2.5 s stride. Full table in
-Chapter 14.
+Chapter 15.
 
 | Result | Number |
 |---|---|
@@ -353,6 +353,7 @@ Seven separate things, all in the documents rather than the code:
 |---|---|---|
 | **D-51 and D-52 are each used twice** | `DECISIONS.md` §1.2 and §1.5 | D-51 is both "music joins the corpus" and "the font table is indexed by raw ASCII"; D-52 is both the zip-index fallback and the `PHONE` pill. 87 rows, 85 distinct numbers |
 | **D-70 was skipped** | `DECISIONS.md` | The cry-mode entry threshold's reasoning is in the code and in D-69's neighbourhood, but no D-70 row exists |
+| **D-95 was skipped** | `DECISIONS.md` | The hosted Cloudflare copy's decision is described in D-97 (the URL) and in the D-91..D-94, D-96..D-99 rows around it, but no row carries the number 95 — the commit that introduced the copy used it, the record never did. 108 rows now carry 106 distinct numbers |
 | **D-3 still says "3-node → hub → wearable"** | `DECISIONS.md` §1.1 | The topology it describes is this system's, with two nodes. D-75…D-81 and §0 correct it, but the row itself was not edited |
 | **O-1's struck-through text still names a DRV2605L** | `DECISIONS.md` §4 | The fitted drive is a BC547 (D-77). The resolution note beside it is correct; the original wording is not |
 | **D-16 and `SYSTEM_UPDATE.md` quote the *previous* model's SHA-256** | `DECISIONS.md` §1.2, `SYSTEM_UPDATE.md` | `4aef55d8…126bc11` is the pre-retrain artefact of 2026-10-29. The **deployed** model is `bd592d54…dce43b9`, and `deploy_config.json` and `check_artifact_drift.py` both carry the live one. D-16's quoted test AUC (0.9995) and cross-corpus AUC (0.9973) belong to the same superseded run; the deployed model's are 0.9993 and 0.9984. **Chapter 5 has the full comparison** |
@@ -403,12 +404,14 @@ nobody later discovers it as a surprise.
 | 10 | **LiFePO4 cells** | Charge-current and thermal behaviour under the project's charging scheme is not established | 18650 for the nodes and hub, a Li-Po pouch for the wearable |
 | 11 | **Per-cot confidence in the BLE alert** | The packet is a frozen six-byte legacy format (D-42) | The confidence bar on the wrist is the loudest cry's figure, not a per-cot figure |
 | 12 | **A second buzz on a cot handover** | The hub always sends `alert_type` 1 for a cry and the wrist buzzes only on the transition into 1 | When the loudest cot changes hands, the wrist stays silent — by design, because the caregiver has already been alerted |
+| 13 | **One radio doing two jobs** | ESP-NOW and Wi-Fi share the hub's radio, and ESP-NOW's channel is fixed at 6 (D-98, Chapter 12) | **The router's 2.4 GHz channel must be set to 6.** On any other channel the hub refuses the network and the dashboard goes dark — and the cots never notice, which is the point of the rule |
+| 14 | **Audio never leaves the room** | The dashboard's records are metadata — numbers, durations, confidences; there is no microphone feed on any network | No remote listening-in, ever, at any price; the record cannot leak what it does not hold |
 
 ---
 
 ## 4. What has *not* been measured
 
-The full list is in [Chapter 14](#chapter-14); this is the same list arranged by what it
+The full list is in [Chapter 15](#chapter-15); this is the same list arranged by what it
 blocks.
 
 | Unmeasured | What it blocks | How it would be closed |

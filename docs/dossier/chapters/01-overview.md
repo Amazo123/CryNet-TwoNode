@@ -7,8 +7,9 @@ daycare, a twin nursery. Two microphone nodes sit with the cots, one at each. Ea
 continuously and decides for itself when something interesting has happened. When it does, it hands
 its two seconds of audio to a central hub over a short-range radio link. The hub reassembles the
 audio, runs a small neural network over it, and decides whether that sound is an infant cry. If it
-is, the hub names the cot on its display and raises an alert over Bluetooth, which a caregiver's
-wristband turns into a vibration.
+is, the hub names the cot on its display, raises an alert over Bluetooth — which a caregiver's
+wristband turns into a vibration — and writes the event to a record in its own flash, which a web
+dashboard reads so that a cry at three in the morning is still visible at nine.
 
 The three design choices that everything else follows from:
 
@@ -27,7 +28,7 @@ The three design choices that everything else follows from:
 | Unit | Board | Role | Key numbers |
 |---|---|---|---|
 | **Cot node** &times;2 | ESP32-C3 **Pro Mini** + INMP441 I&sup2;S MEMS microphone | Samples audio at 16 kHz, tracks its own noise floor, freezes a two-second window when a cry crosses the trigger, sends it to the hub | GPIO4/5/6 for I&sup2;S; ESP-NOW channel 6; 286-fragment burst; 75 % flash, 50 % RAM of the C3's budget |
-| **Hub** | ESP32-S3-DevKitC-1 (dual-core Xtensa LX7 @ 240 MHz, 512 KB SRAM, 8 MB PSRAM) + 2.8" ILI9341 TFT | Reassembles windows, runs the DSP front end and an INT8 CNN, arbitrates between cots, drives the panel, serves the BLE alert service | 135 KB INT8 model; front end 41.7 ms, inference 101.8 ms per window; 13.0 % RAM, 63.6 % flash; 286/286 fragments, CRC-32 MATCH |
+| **Hub** | ESP32-S3-DevKitC-1 (dual-core Xtensa LX7 @ 240 MHz, 512 KB SRAM, 8 MB PSRAM) + 2.8" ILI9341 TFT | Reassembles windows, runs the DSP front end and an INT8 CNN, arbitrates between cots, drives the panel, serves the BLE alert service, keeps the cry log, uploads it over Wi-Fi and posts presence | 135 KB INT8 model; front end 41.7 ms, inference 101.8 ms per window; 14.3 % RAM, 77.2 % flash; 286/286 fragments, CRC-32 MATCH |
 | **Wearable** | ESP32-C3 SuperMini + 0.96" SSD1306 OLED + coin ERM on a BC547 low-side switch | BLE client; shows the alert and which cot is crying; buzzes | GPIO7 &rarr; 2.2 k&Omega; &rarr; BC547 base; 22 &Omega; stall cap; 2.5 s haptic pulse train |
 
 ## Two cots, enforced in the link layer
@@ -74,7 +75,7 @@ not wholly untried. But the nodes and the hub have only ever been USB-powered, *
 life has been measured**, the boost module's own quiescent draw is unquantified, and the haptic buzz
 went missing while the wrist was on the pouch (a sagging 3.3 V rail is the live candidate). The
 runtime figures in the documents are *projections* from the regulator's behaviour and are labelled as
-such. This is O-1d, and [Chapter 12](#chapter-12) carries the arithmetic and the three rules the 5 V
+such. This is O-1d, and [Chapter 13](#chapter-13) carries the arithmetic and the three rules the 5 V
 chain must obey (D-84).
 
 Two smaller things belong in the same breath, because a defence should not be caught by them:
@@ -115,4 +116,8 @@ window is announced only if the model is near-saturated, or if two consecutive w
 the second carries real energy and the right crest. A cry is held for eight seconds, the loudest
 cot keeps the alert unless another cot is clearly louder for a second and a half, and the whole
 system state is published over Bluetooth as a six-byte alert packet and an eight-byte state packet,
-which the wristband turns into a 2.5-second vibration and a face that names the cot.
+which the wristband turns into a 2.5-second vibration and a face that names the cot. Every event —
+each cry episode, each deaf spell, each boot — is also written to a thirty-two-byte record in six
+megabytes of the hub's own flash, stamped with the wall clock where the hub knows it and marked
+untimed where it does not; when the hub is on a network it uploads those records to a dashboard —
+one offline copy, one hosted — which shows who is here, what happened, and when.

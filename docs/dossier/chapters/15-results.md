@@ -1,4 +1,4 @@
-# Chapter 14 — Every measured result, and how it was obtained
+# Chapter 15 — Every measured result, and how it was obtained
 
 ## How to read this chapter
 
@@ -172,9 +172,10 @@ publishes (`0xFF` for a cot count that cannot happen, `-1000` for the timestamp)
 |---|---|
 | Hub RAM before the PSRAM move | 59.9 % (196,140 B) |
 | **Hub RAM after** | **12.9 % (42,236 B)** |
-| **Hub RAM, current two-cot build** | **13.0 %** |
+| **Hub RAM, current build (log + clock + Wi-Fi in)** | **14.3 % (46,788 B)** |
 | Hub flash, before the two-cot fields | 61.9 % (1,297,303 B of 2 MB) |
-| **Hub flash, current two-cot build** | **63.6 %** |
+| Hub flash, two-cot build | 63.6 % (1,335,248 B) |
+| **Hub flash, current build** | **77.2 % (1,619,615 B)** — the growth is the network stack, the certificate bundle and the cry log |
 | Free internal heap at boot | 298,763 B |
 | …after the probes | 290,791 B |
 | …with the radio up | 215,155 B |
@@ -291,6 +292,25 @@ microphone self-report. **A liveness flicker cannot drop a cry, misattribute one
 cot count, or raise a spurious buzz.** Its one real consequence is cosmetic — the panel can momentarily
 name a different cot than the wrist. The duration was *not* measured (the hub's UART was absent), so
 the cause is reasoned from the code, not observed in a log.
+
+## The dashboard phase, measured — 2026-11-24/25
+
+| Claim | Number | Source |
+|---|---|---|
+| Presence cadence, clean-power soak | **15 posts at the exact 30 s cadence, zero cot flap, zero restarts in 10 min** | D-106 |
+| The restarts' real cause | **stack overflow in task `main`** — a 3,584-byte stack sized for an `app_main` that returns, running a system whose `app_main` never returns; now 16,384 B | D-107 |
+| The same soak, after the stack fix | **zero restarts, telemetry live on both cots** | D-107 |
+| D-108's live proof | production D1 rows with `at` **2,251 s old** reading "online" against a 90 s window; after the fix the same rows read offline | deploy `d6deaeda` |
+| The owner's end-to-end cry test | **5 cries, seq 111–115, both cots, two episodes one second apart** — all present on the hosted dashboard with presence fresh | live API |
+| The contract test | full pass, including the D-108 section, which **fails on the pre-fix server** | `test_dashboard_contract.py` |
+| Upload idempotence | a repeated batch adds **0** records | contract test |
+
+Two of these deserve their sentences. The stack overflow is the phase's honest headline: the
+"restarts were power" diagnosis of D-106 was made in good faith from a real soak and was still
+wrong, and only the next capture caught it — the decision record keeps both, in order. And the
+D-108 fix is proved the strongest way a dashboard fix can be: the regression test was made to fail
+against the old server first, then the fix was deployed and the same live rows that lied now tell
+the truth.
 
 ## What has *not* been measured
 

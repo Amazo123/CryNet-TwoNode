@@ -24,7 +24,7 @@ that would otherwise look arbitrary.
 | 0 | `cot_id` | u8 | which cot |
 | 1 | `alert_type` | u8 | **1 = cry, 2 = stopped/cleared, 3 = deaf** |
 | 2–3 | `confidence_pct` | u16 LE | 0–100 |
-| 4–5 | `event_id` | u16 LE | monotonic, so a repeat can be told from a new event |
+| 4–5 | `event_id` | u16 LE | the cry log's record number for this event, truncated to 16 bits — the same number the dashboard stores; 0 means the log was unavailable and the hub counted the event itself |
 
 ### The state packet — 8 bytes
 
@@ -114,13 +114,19 @@ before the guard was added.
 ## Publishing
 
 ```c
-void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct);
-void ble_alert_publish_deaf(uint8_t cot_id);
+void ble_alert_publish(uint8_t cot_id, bool crying, uint16_t confidence_pct,
+                       uint32_t record);
+void ble_alert_publish_deaf(uint8_t cot_id, uint32_t record);
 void ble_alert_publish_state(const ble_state_packet_t *state);
 ```
 
-`s_event_id` increments on every publish, so the wearable can distinguish a new event from a
-repeated notification of the same one. Notifications are sent only when a client is connected and
+`record` is the cry log's number for the event, handed out when the episode *starts* so the wrist
+can show it while the cry is still running. It is what distinguishes a new event from a repeated
+notification of the same one, and it is the join between the three surfaces: the buzz, the panel
+and the dashboard's record all name the same number (Chapter 12). The packet field is sixteen bits,
+so the number wraps at 65,536 — about three years of nights — while the dashboard keeps the whole
+thirty-two. When the log could not be opened, the hub passes 0 and counts its own events, so the
+wrist still shows a number that rises. Notifications are sent only when a client is connected and
 subscribed; the value is also readable, so a client that attaches mid-cry gets the current state
 rather than waiting for the next edge.
 

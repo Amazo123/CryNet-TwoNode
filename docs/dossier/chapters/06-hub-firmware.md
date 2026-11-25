@@ -2,7 +2,7 @@
 
 ## Layout
 
-The hub is an ESP-IDF application built through PlatformIO, with seven first-party components. It is
+The hub is an ESP-IDF application built through PlatformIO, with ten first-party components. It is
 not an Arduino sketch: the BLE stack (NimBLE), the coexistence configuration and the PSRAM allocator
 all need `sdkconfig`, and Arduino's prebuilt ESP32 core does not expose it.
 
@@ -11,7 +11,7 @@ firmware/hub_infer/
   platformio.ini
   src/
     main.c            boot, probes, init order, then the main loop
-    link_stage.c/.h   reassembly, verdicts, arbitration, liveness  (1,642 lines)
+    link_stage.c/.h   reassembly, verdicts, arbitration, liveness  (1,824 lines)
     console.c/.h      the serial command interface
     probes.c/.h       the four self-test windows
   components/
@@ -22,6 +22,9 @@ firmware/hub_infer/
     node_link/        ESP-NOW receive/transmit
     ble_alert/        NimBLE GATT server
     hub_display/      ILI9341 driver + the panel UI
+    crynet_log/       the cry log, on the hub's own flash   (Chapter 12)
+    crynet_clock/     the wall clock, and honesty about not having it
+    crynet_net/       Wi-Fi, the uploader, and the presence report
     esp-tflite-micro/ vendored third party
     esp-nn/           vendored third party, SIMD kernels
 ```
@@ -33,7 +36,7 @@ fetched and what had to be patched.
 
 ## Boot, in order
 
-`app_main()` does seven things, and the order of five of them is load-bearing.
+`app_main()` does eight things, and the order of six of them is load-bearing.
 
 ### 1. Report the platform
 
@@ -43,7 +46,10 @@ quantisation scale and zero-point. Every one of these is a number a defence migh
 the firmware prints them at every boot rather than leaving them in a document.
 
 One ESP-IDF 6.x migration detail lives here: `esp_flash_get_size()` now takes a chip handle (`NULL` =
-default chip) and writes through an out-parameter, where 5.x returned it directly.
+default chip) and writes through an out-parameter, where 5.x returned it directly. And one honesty
+rule (D-106): the banner is the identity check, so the firmware version it prints is stamped at
+configure time — an earlier build inherited a stale stamp and described a new build as an old one,
+which is how a real stack overflow went undiagnosed for a night (see **The stacks**, below).
 
 ### 2. Initialise NVS
 
@@ -87,7 +93,16 @@ For each probe:
 
 Then the buffers are freed and the free internal heap is printed again.
 
-### 5. Radio, then Bluetooth, then display
+### 5. Memory, clock and log
+
+Before any radio comes up, the hub opens its record: `crynet_clock_init()`, then `crynet_log_init()`,
+which mounts the six-megabyte SPIFFS partition that had been reserved from the first build and never
+used, and restores the clock from the last time the log saved. The hub's own start is written as a
+`boot` record — a gap in the cry history means either a quiet night or a hub that was off, and only
+the boot records tell them apart. A flash that will not mount is a **warning, not a stop**: the
+monitoring is the product, the record is a benefit.
+
+### 6. Radio, then Wi-Fi, then Bluetooth, then display
 
 The order is stated in the source and it was learned the hard way:
 
@@ -104,24 +119,37 @@ Measured free internal heap through the sequence:
 | Radio up | 215,155 B |
 | Bluetooth up | **149,271 B** |
 
-The display comes third because its 153,600-byte framebuffer goes to PSRAM and its driver needs only
-a small internal allocation.
+*(That ladder was measured before the Wi-Fi stage joined the boot; the current sequence — clock and
+log, radio, uploader, Bluetooth — prints its own free-heap lines on the banner at every start, and
+the Wi-Fi driver's buffers come out of the same internal RAM as NimBLE's pools, which is exactly why
+both of them initialise before Bluetooth.)*
 
-### 6. Console last
+The uploader shares the radio with ESP-NOW, so `crynet_net_start()` runs here too, its interface
+created while the internal heap is still whole. With no network configured it starts nothing and
+costs nothing.
+
+The display comes last of the subsystems because its 153,600-byte framebuffer goes to PSRAM and its
+driver needs only a small internal allocation.
+
+### 7. Console last
 
 `console_start()` is deliberately last, "so that every command it accepts can be carried out: the
 radio is up, the Bluetooth server is up, and a test alert has somewhere to go."
 
-### 7. `link_stage_run()`
+### 8. `link_stage_run()`
 
 The main loop, which never returns.
 
 ## Graceful degradation
 
-Each of the three optional subsystems is started with a warning, not an abort:
+Each of the five optional subsystems is started with a warning, not an abort:
 
 ```c
+if (!crynet_log_init())        ESP_LOGW(TAG, "the cry log could not be opened; "
+                                         "the hub carries on without a record");
 if (!link_stage_radio_start()) ESP_LOGW(TAG, "the radio could not be started; the hub carries on without it");
+if (!crynet_net_start())       ESP_LOGW(TAG, "the uploader could not be started; "
+                                         "cries are still recorded in the hub's flash");
 if (!ble_alert_start())        ESP_LOGW(TAG, "the Bluetooth alert server could not be started; ...");
 if (!hub_display_start())      ESP_LOGW(TAG, "the display could not be started; ...");
 ```
@@ -133,8 +161,9 @@ no hub.
 
 ## The console
 
-`console.c` is 180 lines: a 3,072-byte task at priority 3 reading lines of at most 64 characters from
-the same UART the log is written to.
+`console.c` is 444 lines: a 5,120-byte task at priority 3 reading lines from the same UART the log
+is written to. It grew with the record and the network, and its word list is the system's second
+control panel:
 
 | Command | Effect |
 |---|---|
@@ -142,11 +171,28 @@ the same UART the log is written to.
 | `status` | cots, liveness, crying mask, deaf mask, heap, counters |
 | `alert <cot>` | inject a test alert for that cot, all the way to BLE |
 | `clear` | clear the alert state |
+| `history [n]` | the last n cry-log records, newest first |
+| `log` | how much is recorded and how much is unsent |
+| `log clear` | throw the log away (the record numbers carry on) |
+| `net` | the network: state, batches, failures, last error |
+| `net set <url>` | where the records are posted |
+| `net ssid <s> <p>` | which Wi-Fi to join |
+| `net name <n>` | this hub's name on the dashboard |
+| `net token <t>` | the dashboard's shared secret (NVS, never compiled in) |
+| `upload` | send the unsent records now |
+| `logtest` | prove, on this chip, that out-of-order records are not lost |
+
+All of the configuration words write NVS, so they survive a reflash; nothing about the network is
+compiled into the image, and the token is not a tracked file (D-103).
 
 `alert <cot>` is the reason the BLE path can be tested without making a noise. It exercises the real
 publish path — the same `ble_alert_publish()` the detection logic calls — so a successful `alert 1`
 proves the GATT server, the notification and the wearable's callback, independently of the model.
-That separation is what allowed the haptic fault to be localised to hardware (Chapter 12).
+That separation is what allowed the haptic fault to be localised to hardware (Chapter 14).
+
+Two parsing rules were paid for in lost words: an exact match guards `log` because a prefix match
+would swallow `logtest` and print the log instead of running the proof (D-98); and `net` is matched
+with the same care, because the network's words all begin with it.
 
 ## `link_stage.c` — the state machine
 
@@ -306,6 +352,23 @@ airtime investigation (Chapter 9).
 | `CONFIG_BT_NIMBLE_MAX_CONNECTIONS` | 1 | one caregiver device |
 | `CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU` | 247 | comfortably above the 8-byte state packet |
 | **`CONFIG_ESP_COEX_SW_COEXIST_ENABLE`** | **y** | software coexistence arbitrates airtime between ESP-NOW and BLE on the one radio |
+| `CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM` / `DYNAMIC` | 32 / 64 | a cot sends a 286-fragment burst as fast as the radio allows; the hub needs receive buffers that can hold one. Affordable now that the probe buffers live in PSRAM |
+| `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE` (+ `_DEFAULT_FULL`) | y | root certificates, so an `https://` dashboard can prove who it is; about 60 KB of flash, read only when a connection is actually made |
+| `CONFIG_LWIP_SNTP_MAX_SERVERS` | 3 | lwIP's default room is one; two time servers are configured, so one being unreachable is not a clock lost |
+| `CONFIG_ESP_WIFI_NVS_ENABLED` | **n** | the station keeps its config in RAM: the cot link owns the radio's channel, and nothing about the network should be written to flash on every boot |
+
+### The stacks (D-107)
+
+The last firmware reliability finding is not a setting anyone would guess at. The whole live system
+runs in ESP-IDF's `main` task — `app_main()` never returns — but that task's stack was left at the
+**3,584-byte default sized for an `app_main` that returns**, and the hub died mid-run with a stack
+overflow that presented as random restarts. The restarts had first been diagnosed as power-class
+resets (D-106) on the strength of a clean-power soak; the very next capture caught the real cause.
+The main task now has **16,384 bytes**, every task's stack is sized for what actually runs on it
+(console 5,120 · `crynet_net` 8,192 · display 4,096), and the same soak that once exonerated the
+power supply now runs silent: zero restarts, zero cot flap, presence posts on the exact 30-second
+cadence. The lesson is recorded in the decision itself: *a soak proves the configuration that ran
+during the soak.*
 
 ### The flash-mode subtlety (D-47)
 
@@ -321,6 +384,8 @@ itself once it is running**, so nothing is lost — DIO costs nothing at this wo
 `firmware/tools/flash_hub.py --merged` therefore passes `--flash-mode dio` explicitly when it combines
 the three images.
 
-Build result: **RAM 13.0 %, flash 63.6 %** of the 2 MB application slot. (The figure quoted in older
-log entries — 61.9 % flash, 12.9 % RAM, 42,236 B — predates the two-cot link fields, the RSSI plumbing
-and the heartbeat; the difference is a few hundred bytes of static state and one more frame builder.)
+Build result: **RAM 14.3 % (46,788 B), flash 77.2 % (1,619,615 B)** of the 2 MB application slot.
+(The 13.0 % / 63.6 % quoted in earlier editions predates the cry log, the clock and the Wi-Fi stage;
+the 12.9 % / 61.9 % quoted in ones older than that predates the two-cot link fields, the RSSI
+plumbing and the heartbeat. Each figure was true when it was printed, which is why the banner, not
+this document, is the identity check.)

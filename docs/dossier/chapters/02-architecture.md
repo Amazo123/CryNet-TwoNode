@@ -274,6 +274,10 @@ Two GATT characteristics on service `19b10000-e8f2-537e-4f6c-d104768a1214`:
 - **State** `19b10002-…`, 8 bytes: `cots`, `crying_mask` (bit 0 = cot 1), `deaf_mask`,
   `confidence_pct`, `started_at_s` (u32).
 
+The alert's `event_id` is now the cry log's own number for the episode — the same number the
+dashboard stores — so the buzz, the panel and the web record can be matched up after the fact
+(Chapter 12).
+
 This contract is **frozen legacy**: the wearable was written against it before the rebuild, and it was
 kept byte-for-byte so the two halves could be developed independently. That is a real engineering
 decision with a real cost — `alert_type` has one value for "cry", which is why the model is binary
@@ -284,7 +288,17 @@ decision with a real cost — `alert_type` has one value for "cry", which is why
 The wearable's notify callback parses the packet, sets the alert face, and starts a 2.5-second haptic
 pulse train on GPIO7 through a BC547 low-side switch, with a 22 Ω stall cap in the motor's positive
 lead and a 1N5819 flyback diode across it (D-77, D-85). The alert face holds for 60 seconds and names
-the cot the alert carried.
+the cot the alert carried — and the `event_id` it shows is the cry log's record number, so the buzz
+can be traced to the dashboard's entry for that exact cry.
+
+### 15. Record and report (hub → flash → dashboard)
+
+Independently of the alert, the episode is written to the hub's flash as a thirty-two-byte record —
+with a wall-clock stamp when the hub knows the time, and `epoch_s = 0` when it does not — and, when
+the hub is on a network, uploaded to the dashboard in batches, alongside a presence post every
+30 seconds that says who is in the room right now. None of this is on the detection path: with no
+network, the only difference is that the records wait in flash. Chapter 12 is this subsystem's
+chapter.
 
 ## Timing budget
 
@@ -315,12 +329,18 @@ quiet channel and 5.19 s on a busy one, and why the honest figure is a range and
 | Hub boot probe buffers | large, temporary | PSRAM, **freed after probes** | D-39/D-40 |
 
 The boot-only buffers are the reason the hub's RAM figure went from **59.9 % (196,140 B) to 12.9 %
-(42,236 B)** — the current build reports **13.0 % RAM, 63.6 % flash**, the small difference being the
-cot-count and RSSI fields the two-cot link layer added. They exist to prove the DSP and the model agree with the host at startup; once proven
-they are dead weight, and freeing them is what leaves room for the radio and Bluetooth to coexist.
+(42,236 B)** — and since then the cry log, the clock and the Wi-Fi stage moved it again: the current
+build reports **14.3 % RAM (46,788 B), 77.2 % flash (1,619,615 B)**, the growth being the network
+stack, the certificate bundle and the log, none of it on the detection path. The boot probes exist to
+prove the DSP and the model agree with the host at startup; once proven they are dead weight, and
+freeing them is what leaves room for the radio, Bluetooth and Wi-Fi to coexist.
 
-Initialisation order is **radio → Bluetooth → display**, and it is not arbitrary: each of those
-subsystems takes a large, permanent bite of *internal* heap, and the display's framebuffer must go to
-PSRAM. Free internal heap through the sequence: 298,763 B at boot → 290,791 B after probes →
-215,155 B with the radio up → 149,271 B with Bluetooth up. Getting the order wrong starves the last
-subsystem to start, which is how the BLE stack failed to initialise in an early build.
+Initialisation order is **clock and log → radio → Wi-Fi uploader → Bluetooth → display → console**,
+and it is not arbitrary: each of those subsystems takes a large, permanent bite of *internal* heap,
+the display's framebuffer must go to PSRAM, and NimBLE's pools and the Wi-Fi driver's buffers come
+out of the *same* internal RAM — when Bluetooth claimed its memory first, the Wi-Fi driver ran out
+mid-init and the ESP-NOW link never started. So the radio and the uploader both take what they need
+while the heap is whole, and BLE lives on what is left. (The free-heap ladder through that sequence
+is printed on the boot banner at every start; the figures quoted in earlier editions predate the
+Wi-Fi stage joining the boot.) Getting the order wrong starves the last subsystem to start, which is
+how the BLE stack failed to initialise in an early build.

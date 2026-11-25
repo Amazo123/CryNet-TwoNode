@@ -214,4 +214,4 @@ and a run that does not.
 The notebook downloads roughly **4.6 GB** of audio, resumable via `huggingface_hub`, into
 `research/_cache/`. Kaggle is the training host because it provides a GPU and because the download is
 fast there; the same notebook runs locally in `FAST` mode against a stub cache for pipeline
-validation. Chapter 19 gives the exact commands.
+validation. Chapter 20 gives the exact commands.
