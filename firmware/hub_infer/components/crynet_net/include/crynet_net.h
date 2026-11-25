@@ -97,8 +97,8 @@ void crynet_net_upload_now(void);
 
 /* Say who is here.  The hub hands over what it knows about each cot --
  * whether it is answering, whether it has gone deaf, how strong its
- * radio is -- and this component posts it to the dashboard once a
- * minute, whether or not there is anything in the log to send.
+ * radio is -- and this component posts it to the dashboard, whether or
+ * not there is anything in the log to send.
  *
  * That is the point of it: a hub that has been quiet for a week is
  * still a hub that is working, and a dashboard that only learns of a
@@ -106,6 +106,16 @@ void crynet_net_upload_now(void);
  * or a dead hub.  The copy is taken here, so the caller's array does
  * not have to outlive the call. */
 void crynet_net_set_presence(const crynet_net_node_t *nodes, uint8_t count);
+
+/* Name the thing that decides whether a cot's radio traffic is in
+ * flight -- a window being pulled from a cot, say -- and the presence
+ * will wait for it rather than take the air from under it.  The link
+ * stage registers this, because the link stage is the one that knows.
+ * The wait is capped inside the network stage, so a guard that is
+ * stuck saying "busy" can delay a report but never stop the reports:
+ * the dashboard may be a few seconds behind, never absent.  Pass NULL
+ * to remove one. */
+void crynet_net_set_radio_guard(bool (*busy)(void));
 
 /* This hub's identity on the dashboard, e.g. "hub-7c9ebd12". */
 const char *crynet_net_device_id(void);

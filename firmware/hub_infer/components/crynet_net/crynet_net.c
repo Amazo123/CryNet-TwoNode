@@ -77,17 +77,24 @@ static const char *TAG = "crynet";
 #define WRONG_CHANNEL_RETRY_S 300
 
 /* How often the hub says who is here.  The owner asked for the hub's
- * connection to be checked "as often as possible", because a hub that
- * had been switched off still read as online for minutes afterwards.
- * The chain that decides "online" has three links -- how often the hub
- * speaks, how long the service waits before it calls a hub gone, and
- * how often the page asks -- and the answer is the sum of them.  This
- * is the first link, so it is made short: a quarter of a minute.  The
- * cost is one small request every fifteen seconds, which is 5760 a day
- * against a free tier's hundred thousand, and a TLS handshake each time
- * -- a few hundred milliseconds of radio time in a day, on the same
- * channel the cots use, which the radio time budget can afford. */
-#define PRESENCE_EVERY_S 15
+ * connection to be checked "as often as possible", and then added the
+ * constraint that decides it: nothing may cost the cots anything.
+ * Each report is a TLS handshake, which takes the radio for a moment,
+ * and the cots share that radio -- so the interval is thirty seconds,
+ * and the presence also *yields*: while a window is in flight from a
+ * cot, the report waits for it to finish (see the guard below, and
+ * PRESENCE_MAX_WAIT_US).  Thirty seconds is 2880 requests a day
+ * against a free tier's hundred thousand. */
+#define PRESENCE_EVERY_S 30
+
+/* How long the presence will wait for a cot's window to finish before
+ * it posts anyway.  The wait keeps a report from landing in the middle
+ * of a burst; the cap keeps a busy radio from delaying the reports
+ * into a silence the dashboard would read as a hub gone away.  The
+ * worst gap between reports is therefore PRESENCE_EVERY_S plus this --
+ * fifty seconds -- which stays inside the dashboard's own idea of how
+ * long a hub may go without speaking (three reports missed). */
+#define PRESENCE_MAX_WAIT_US (20LL * 1000000LL)
 
 #define BIT_IP    (1u << 0)
 #define BIT_LOST  (1u << 1)
@@ -128,6 +135,15 @@ static crynet_net_node_t s_nodes[CRYNET_NET_MAX_NODES];
 static uint8_t s_node_count = 0;
 static bool s_presence_known = false;
 static int64_t s_next_presence_us = 0;
+/* How long the current report has been waiting for a cot's window, 0
+ * if it is not waiting.  Touched only under s_presence_lock. */
+static bool (*s_radio_busy)(void) = NULL;
+static int64_t s_presence_wait_since_us = 0;
+
+void crynet_net_set_radio_guard(bool (*busy)(void))
+{
+    s_radio_busy = busy;
+}
 
 /* ------------------------------------------------------------------ */
 /* Configuration in NVS.                                               */
@@ -630,15 +646,37 @@ static void net_task(void *arg)
             continue;   /* clock only; nothing to post to */
         }
 
-        /* The presence goes every fifteen seconds whatever else is
+        /* The presence goes every thirty seconds whatever else is
          * happening.  A hub that is working but has nothing to say still
          * has to be able to say that it is there -- and it has to say
          * it often enough that a hub which has just been switched off
-         * is gone from the dashboard before anyone goes looking. */
+         * is gone from the dashboard before anyone goes looking.
+         *
+         * But a cot's window outranks it.  A burst takes the air, and
+         * while it is on it the Wi-Fi receiver hears nothing -- not the
+         * burst's own fragments, and nothing else.  So while the link
+         * stage says a burst is in flight, the report waits for it.
+         * The wait is capped, because a hub that has been switched off
+         * must still be reported gone: a report may be twenty seconds
+         * late, it may not be missing. */
         bool presence_due = false;
         if (s_presence_lock != NULL &&
             xSemaphoreTake(s_presence_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
             presence_due = s_presence_known && now >= s_next_presence_us;
+            if (presence_due && s_radio_busy != NULL && s_radio_busy()) {
+                if (s_presence_wait_since_us == 0) {
+                    s_presence_wait_since_us = now;
+                    presence_due = false;
+                } else if (now - s_presence_wait_since_us >=
+                           PRESENCE_MAX_WAIT_US) {
+                    s_presence_wait_since_us = 0;
+                    /* waited long enough; post anyway */
+                } else {
+                    presence_due = false;
+                }
+            } else {
+                s_presence_wait_since_us = 0;
+            }
             if (presence_due) {
                 s_next_presence_us =
                     now + (int64_t)PRESENCE_EVERY_S * 1000000;

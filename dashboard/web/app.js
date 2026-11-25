@@ -428,10 +428,12 @@
    * it is the one the owner opens the dashboard to ask, and it is
    * answered by one small endpoint.  So it is asked on its own, every
    * ten seconds, without dragging the rest of the page along with it.
-   * The three links in the chain -- the hub speaks every 15 s, the
-   * service calls a hub gone after 45 s, the page asks every 10 s --
-   * add up to about a minute between switching the hub off and the
-   * page saying so. */
+   * The three links in the chain -- the hub speaks every 30 s, the
+   * service calls a hub gone after 90 s, the page asks every 10 s --
+   * add up to about two minutes between switching the hub off and the
+   * page saying so.  The hub could speak every 15 s and this could be
+   * shorter still, but the cots share the hub's radio and the owner
+   * set the order: nothing costs the cots anything. */
   function refreshPresence() {
     if (state.presenceBusy) return;
     state.presenceBusy = true;

@@ -324,6 +324,23 @@ static bool s_was_live[NODE_LINK_MAX_NODES];
 #define PRESENCE_EVERY_MS 2000
 static int64_t s_presence_at_us = 0;
 
+/* The dashboard's presence report must not take the air from under a
+ * cot's burst: while a window is in flight the Wi-Fi receiver is deaf
+ * to that burst's own fragments, and a report landing in the middle of
+ * one costs fragments and a round of resends.  So the network stage
+ * asks this before it posts, and waits while a burst is running.  The
+ * network stage caps the wait, so this can delay a report a little but
+ * never stop the reports. */
+static bool radio_busy_for_presence(void)
+{
+    for (int i = 0; i < NODE_LINK_MAX_NODES; i++) {
+        if (state[i].heard && state[i].requested) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* The cry record.
  *
  * One record per episode, not one per window: a baby who cries for a
@@ -812,6 +829,10 @@ bool link_stage_radio_start(void)
         ESP_LOGE(TAG, "the radio could not be started");
         return false;
     }
+
+    /* The presence report yields to a burst: hand the network stage the
+     * one function that knows whether a cot's window is in flight. */
+    crynet_net_set_radio_guard(radio_busy_for_presence);
 
     ESP_LOGI(TAG, "listening on ESP-NOW; asking for audio at RMS >= %.3f "
                   "(the level a node reports wins; this is the fallback)",

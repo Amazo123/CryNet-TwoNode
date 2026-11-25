@@ -361,17 +361,20 @@ def local_date(ts: int, lt=make_local()) -> str:
     return lt(ts).date().isoformat()
 
 
-# A hub is taken to be there if it has said something in the last three
-# quarters of a minute.  The hub says every fifteen seconds, so three is
-# three chances missed before the dashboard calls it gone -- long enough
-# that one dropped request does not make the caregiver think the hub has
+# A hub is taken to be there if it has said something in the last
+# ninety seconds.  The hub says every thirty seconds, so three is three
+# chances missed before the dashboard calls it gone -- long enough that
+# one dropped request does not make the caregiver think the hub has
 # died, short enough that a hub that has been switched off is gone
-# before anyone has looked away.  The owner asked for the connection
-# to be checked "as often as possible"; the answer is the sum of the
-# three links in the chain -- how often the hub speaks (15 s), how long
-# this waits (45 s), and how often the page asks (10 s) -- so each of
-# them was shortened and this one kept its rule of three.
-PRESENCE_STALE_S = 45
+# before anyone has looked away.  The owner first asked for the
+# connection to be checked "as often as possible" and then set the
+# constraint that actually decides it: nothing may cost the cots
+# anything, and they share the hub's radio.  So the hub posts half as
+# often as the fastest figure considered (30 s, not 15 s), and the
+# service's window is three of those.  The chain -- the hub speaks
+# every 30 s, this waits 90 s, the page asks every 10 s -- means a hub
+# that is switched off reads as gone in about two minutes.
+PRESENCE_STALE_S = 90
 
 
 def build_presence(store: Store) -> dict:
