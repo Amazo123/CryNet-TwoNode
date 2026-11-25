@@ -20,6 +20,7 @@
 #include "crynet_model.h"
 #include "crynet_proto.h"
 #include "crynet_log.h"
+#include "crynet_net.h"
 #include "node_link.h"
 
 static const char *TAG = "link";
@@ -316,6 +317,12 @@ static node_state_t state[NODE_LINK_MAX_NODES];
 /* Whether each cot was on the panel the last time round, so that a
  * change can be announced instead of only shown. */
 static bool s_was_live[NODE_LINK_MAX_NODES];
+
+/* How often the hub hands the dashboard the list of who is here.  It is
+ * far quicker than the hub's own once-a-minute post, so the picture the
+ * dashboard has is never more than a few seconds old when it is sent. */
+#define PRESENCE_EVERY_MS 2000
+static int64_t s_presence_at_us = 0;
 
 /* The cry record.
  *
@@ -1683,6 +1690,15 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
         ds.ble_ready = ble_alert_is_running();
         ds.ble_clients = (uint8_t)ble_alert_clients();
         ds.uptime_s = (uint32_t)((snap_now - s_boot_us) / 1000000);
+        /* The wireless link.  The panel says whether the hub is on the
+         * network, because the hub's own record is what the network
+         * carries: a grey mark means the cries are sitting in the
+         * hub's flash and nobody can see them yet. */
+        {
+            crynet_net_status_t netst;
+            crynet_net_status(&netst);
+            ds.wifi_up = netst.wifi_up;
+        }
         if (show != NULL) {
             ds.linked = true;
             ds.crying = link_stage_crying(show->node_id);
@@ -1730,6 +1746,31 @@ void link_stage_run(crynet_dsp_ctx_t *dsp, crynet_infer_t *infer)
             }
         }
         hub_display_update(&ds);
+
+        /* Tell the dashboard who is here.  The cots have no network of
+         * their own -- they talk to the hub over its radio -- so the
+         * hub is the only one that can answer for them, and it does so
+         * every minute whether or not there is anything to record. */
+        if (snap_now - s_presence_at_us >= PRESENCE_EVERY_MS * 1000) {
+            s_presence_at_us = snap_now;
+            crynet_net_node_t pres[NODE_LINK_MAX_NODES];
+            uint8_t pres_n = 0;
+            for (int i = 0; i < NODE_LINK_MAX_NODES; i++) {
+                if (!state[i].heard) {
+                    continue;
+                }
+                if (state[i].node_id < 1 ||
+                    state[i].node_id > CRYNET_NET_MAX_NODES) {
+                    continue;
+                }
+                pres[pres_n].cot = state[i].node_id;
+                pres[pres_n].online = node_live(&state[i], snap_now);
+                pres[pres_n].deaf = state[i].deaf;
+                pres[pres_n].rssi = state[i].rssi;
+                pres_n++;
+            }
+            crynet_net_set_presence(pres, pres_n);
+        }
 
         const int64_t stats_now = esp_timer_get_time();
         if ((stats_now - last_stats_us) > 5000000) {

@@ -66,6 +66,7 @@ typedef struct {
 /* The display's own state. */
 typedef struct {
     bool     linked;        /* a node has been heard from */
+    bool     wifi_up;       /* the hub is on the wireless network */
     bool     crying;        /* the hub is announcing a cry */
     uint8_t  cot_id;        /* which cot — the loudest one */
     uint8_t  confidence;    /* the last confirmed confidence, in percent */

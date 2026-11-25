@@ -662,6 +662,44 @@ static void draw_signal_bars(int x, int y, int bars)
     }
 }
 
+/* The wireless mark: two arcs over a dot, the shape every phone shows
+ * for a connection.  There is no glyph for it in the panel's font and
+ * no room for a picture, so it is drawn from the same pixels as
+ * everything else: a dot for the router, and two rings over it for the
+ * signal reaching out.
+ *
+ * The arcs are walked by angle, not by column.  A column-by-column walk
+ * of a shallow arc leaves gaps at the sides -- and the sides are where
+ * the eye looks first, because that is where the arcs end.  Each arc is
+ * two pixels thick, drawn as a pair of radii.
+ *
+ * The mark is always drawn.  A mark that only appears when the link is
+ * up cannot say whether the network is down or the panel is asleep, and
+ * the whole point of putting it on the panel is to answer that without
+ * the caregiver having to ask a phone.  Green means the hub is on the
+ * network; dim grey means it is not, and the records are sitting in the
+ * hub's flash until it is. */
+static void draw_wifi_glyph(int cx, int base_y, uint16_t col)
+{
+    /* The router, at the foot of the mark. */
+    fb_fill(cx - 1, base_y - 2, 3, 3, col);
+
+    static const int radii[2] = { 6, 10 };
+    for (int k = 0; k < 2; k++) {
+        for (int band = 0; band < 2; band++) {
+            const int r = radii[k] - band;
+            for (int a = 35; a <= 145; a += 2) {
+                const float rad = (float)a * 0.01745329f;   /* degrees */
+                const float fx = (float)r * cosf(rad);
+                const float fy = (float)r * sinf(rad);
+                const int x = cx + (int)(fx + (fx >= 0 ? 0.5f : -0.5f));
+                const int y = base_y - (int)(fy + 0.5f);
+                fb_fill(x, y, 1, 1, col);
+            }
+        }
+    }
+}
+
 static void draw_dashboard(const hub_display_state_t *st)
 {
     fb_fill(0, 0, FB_W, FB_H, C_BG);
@@ -670,6 +708,9 @@ static void draw_dashboard(const hub_display_state_t *st)
     fb_fill(0, 0, FB_W, HEADER_H, C_HEADER);
     fb_text(12, 8, "CRYNET", C_ACCENT, 2);
     fb_text(90, 12, "S3 HUB", C_DIM, 1);
+    /* The wireless link, between the hub's name and the cot link: the
+     * two things the hub depends on, side by side. */
+    draw_wifi_glyph(160, 20, st->wifi_up ? C_GREEN : C_DIM);
     /* The cot link: green while at least one cot is answering, amber
      * once every card has gone quiet.  Amber, not the dim grey the
      * first version used, so both pills read the same way — green is

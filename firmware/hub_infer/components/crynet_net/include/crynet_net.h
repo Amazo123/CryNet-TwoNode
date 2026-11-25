@@ -41,6 +41,20 @@ extern "C" {
 #define CRYNET_NET_URL_MAX  160
 #define CRYNET_NET_SSID_MAX 33
 
+/* How many cots the hub can report on. */
+#define CRYNET_NET_MAX_NODES 4
+
+/* What the hub knows about one cot, right now.  The cots have no
+ * network of their own -- they talk to the hub over its radio -- so the
+ * hub is the only thing that can tell the dashboard who is in the room.
+ */
+typedef struct {
+    uint8_t cot;      /* the cot number, 1-based */
+    bool    online;   /* the hub has heard from it lately */
+    bool    deaf;     /* the hub cannot get a window from it */
+    int8_t  rssi;     /* the telemetry signal strength in dBm; 0 = unknown */
+} crynet_net_node_t;
+
 typedef struct {
     char     ssid[CRYNET_NET_SSID_MAX];
     char     url[CRYNET_NET_URL_MAX];
@@ -80,6 +94,18 @@ void crynet_net_status(crynet_net_status_t *out);
 
 /* Ask the uploader to try now rather than wait for its next turn. */
 void crynet_net_upload_now(void);
+
+/* Say who is here.  The hub hands over what it knows about each cot --
+ * whether it is answering, whether it has gone deaf, how strong its
+ * radio is -- and this component posts it to the dashboard once a
+ * minute, whether or not there is anything in the log to send.
+ *
+ * That is the point of it: a hub that has been quiet for a week is
+ * still a hub that is working, and a dashboard that only learns of a
+ * hub when a cry happens cannot say whether the silence is a quiet baby
+ * or a dead hub.  The copy is taken here, so the caller's array does
+ * not have to outlive the call. */
+void crynet_net_set_presence(const crynet_net_node_t *nodes, uint8_t count);
 
 /* This hub's identity on the dashboard, e.g. "hub-7c9ebd12". */
 const char *crynet_net_device_id(void);

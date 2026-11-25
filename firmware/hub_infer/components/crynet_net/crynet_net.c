@@ -28,6 +28,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -75,6 +76,13 @@ static const char *TAG = "crynet";
 #define RECONNECT_EVERY_S 15
 #define WRONG_CHANNEL_RETRY_S 300
 
+/* How often the hub says who is here.  A minute is quick enough that a
+ * hub that has just been switched off is gone from the dashboard before
+ * the caregiver has looked away, and slow enough that it costs nothing:
+ * one small request a minute is 1440 a day against a free tier's
+ * hundred thousand. */
+#define PRESENCE_EVERY_S 60
+
 #define BIT_IP    (1u << 0)
 #define BIT_LOST  (1u << 1)
 
@@ -105,6 +113,15 @@ static int  s_resp_len = 0;
 
 static char *s_json = NULL;
 static crynet_log_event_t *s_recs = NULL;
+
+/* Who is here.  The cots have no network of their own, so the hub is
+ * the only one that can say.  The copy is taken under a lock because
+ * the caller hands it over from another task. */
+static SemaphoreHandle_t s_presence_lock = NULL;
+static crynet_net_node_t s_nodes[CRYNET_NET_MAX_NODES];
+static uint8_t s_node_count = 0;
+static bool s_presence_known = false;
+static int64_t s_next_presence_us = 0;
 
 /* ------------------------------------------------------------------ */
 /* Configuration in NVS.                                               */
@@ -349,20 +366,16 @@ static esp_err_t http_event(esp_http_client_event_t *ev)
     return ESP_OK;
 }
 
-static bool post_batch(const crynet_log_event_t *recs, int n)
+/* Post a body to an address.  Both the records and the presence go
+ * this way: the same token, the same client, the same answer to a
+ * refusal. */
+static bool http_post(const char *url, const char *body, int len)
 {
-    const int len = build_batch(recs, n);
-    if (len <= 0) {
-        snprintf(s_st.last_error, sizeof(s_st.last_error),
-                 "a batch would not fit in the buffer");
-        return false;
-    }
-
     s_resp_len = 0;
     s_resp[0] = 0;
 
     esp_http_client_config_t cfg = {
-        .url = s_url,
+        .url = url,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 10000,
         .event_handler = http_event,
@@ -383,7 +396,7 @@ static bool post_batch(const crynet_log_event_t *recs, int n)
     if (s_token[0]) {
         esp_http_client_set_header(client, "X-CryNet-Token", s_token);
     }
-    esp_http_client_set_post_field(client, s_json, len);
+    esp_http_client_set_post_field(client, body, len);
 
     const esp_err_t err = esp_http_client_perform(client);
     const int status = esp_http_client_get_status_code(client);
@@ -410,6 +423,17 @@ static bool post_batch(const crynet_log_event_t *recs, int n)
         return false;
     }
     return true;
+}
+
+static bool post_batch(const crynet_log_event_t *recs, int n)
+{
+    const int len = build_batch(recs, n);
+    if (len <= 0) {
+        snprintf(s_st.last_error, sizeof(s_st.last_error),
+                 "a batch would not fit in the buffer");
+        return false;
+    }
+    return http_post(s_url, s_json, len);
 }
 
 static void upload_turn(void)
@@ -452,6 +476,94 @@ static void upload_turn(void)
     if (batches > 0) {
         crynet_log_trim();
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Saying who is here.                                                 */
+/* ------------------------------------------------------------------ */
+
+/* The presence goes to the same service as the records, at the same
+ * address with the last word changed: the owner types one address, and
+ * the hub works out the rest.  If the address is not one this can make
+ * sense of, there is nowhere to post to and the hub says so once. */
+static bool presence_url(char *out, size_t cap)
+{
+    const char *slash = strrchr(s_url, '/');
+    if (slash == NULL || slash == s_url || slash[1] == 0) {
+        out[0] = 0;
+        return false;
+    }
+    snprintf(out, cap, "%.*s/presence", (int)(slash - s_url), s_url);
+    return true;
+}
+
+static int build_presence(const crynet_net_node_t *nodes, uint8_t count)
+{
+    char name[sizeof(s_name) * 6 + 1];
+    json_escape(name, sizeof name, s_name);
+    int used = snprintf(s_json, JSON_CAP,
+                        "{\"device\":\"%s\",\"hub\":{\"fw\":\"%s\","
+                        "\"name\":\"%s\"},\"nodes\":[",
+                        s_device, CRYNET_FW_VERSION, name);
+    if (used < 0 || used >= JSON_CAP) {
+        return -1;
+    }
+    for (uint8_t i = 0; i < count; i++) {
+        const crynet_net_node_t *n = &nodes[i];
+        const int add = snprintf(
+            s_json + used, JSON_CAP - used,
+            "%s{\"cot\":%u,\"online\":%s,\"deaf\":%s,\"rssi\":%d}",
+            i ? "," : "",
+            (unsigned)n->cot,
+            n->online ? "true" : "false",
+            n->deaf ? "true" : "false",
+            (int)n->rssi);
+        if (add < 0 || add >= JSON_CAP - used) {
+            return -1;
+        }
+        used += add;
+    }
+    if (used + 3 >= JSON_CAP) {
+        return -1;
+    }
+    s_json[used++] = ']';
+    s_json[used++] = '}';
+    s_json[used] = 0;
+    return used;
+}
+
+static bool post_presence(void)
+{
+    static crynet_net_node_t nodes[CRYNET_NET_MAX_NODES];
+    uint8_t count = 0;
+
+    /* Take a copy under the lock: the caller may be handing over a
+     * newer set of cots while this is being built. */
+    if (s_presence_lock != NULL &&
+        xSemaphoreTake(s_presence_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
+        count = s_node_count;
+        memcpy(nodes, s_nodes, sizeof(nodes[0]) * count);
+        xSemaphoreGive(s_presence_lock);
+    } else {
+        return false;
+    }
+
+    char url[CRYNET_NET_URL_MAX + 16];
+    if (!presence_url(url, sizeof(url))) {
+        return false;
+    }
+    const int len = build_presence(nodes, count);
+    if (len <= 0) {
+        snprintf(s_st.last_error, sizeof(s_st.last_error),
+                 "the presence would not fit in the buffer");
+        return false;
+    }
+    if (!http_post(url, s_json, len)) {
+        ESP_LOGW(TAG, "presence not posted: %s", s_st.last_error);
+        return false;
+    }
+    ESP_LOGI(TAG, "presence posted: %u cot(s)", (unsigned)count);
+    return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -511,6 +623,24 @@ static void net_task(void *arg)
         if (s_url[0] == 0) {
             continue;   /* clock only; nothing to post to */
         }
+
+        /* The presence goes every minute whatever else is happening.  A
+         * hub that is working but has nothing to say still has to be
+         * able to say that it is there. */
+        bool presence_due = false;
+        if (s_presence_lock != NULL &&
+            xSemaphoreTake(s_presence_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
+            presence_due = s_presence_known && now >= s_next_presence_us;
+            if (presence_due) {
+                s_next_presence_us =
+                    now + (int64_t)PRESENCE_EVERY_S * 1000000;
+            }
+            xSemaphoreGive(s_presence_lock);
+        }
+        if (presence_due) {
+            post_presence();
+        }
+
         if (!s_force_upload && now < s_next_upload_us) {
             continue;
         }
@@ -544,6 +674,7 @@ bool crynet_net_start(void)
     snprintf(s_st.url, sizeof(s_st.url), "%s", s_url);
 
     s_events = xEventGroupCreate();
+    s_presence_lock = xSemaphoreCreateMutex();
     s_json = heap_caps_malloc(JSON_CAP, MALLOC_CAP_SPIRAM);
     if (s_json == NULL) {
         s_json = malloc(JSON_CAP);
@@ -553,7 +684,8 @@ bool crynet_net_start(void)
     if (s_recs == NULL) {
         s_recs = malloc(BATCH_RECORDS * sizeof(crynet_log_event_t));
     }
-    if (s_events == NULL || s_json == NULL || s_recs == NULL) {
+    if (s_events == NULL || s_json == NULL || s_recs == NULL ||
+        s_presence_lock == NULL) {
         ESP_LOGE(TAG, "no memory for the uploader; the log still records");
         return false;
     }
@@ -670,6 +802,44 @@ void crynet_net_upload_now(void)
 {
     s_force_upload = true;
     s_next_upload_us = 0;
+}
+
+void crynet_net_set_presence(const crynet_net_node_t *nodes, uint8_t count)
+{
+    if (count > CRYNET_NET_MAX_NODES) {
+        count = CRYNET_NET_MAX_NODES;
+    }
+    if (s_presence_lock == NULL) {
+        return;   /* the network was never started; nothing to tell it */
+    }
+    if (xSemaphoreTake(s_presence_lock, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return;
+    }
+
+    /* Has anything the caregiver would notice changed?  The signal
+     * strength moves constantly and is not one of those things, so it
+     * is carried along but not counted as a change. */
+    bool changed = (count != s_node_count) || !s_presence_known;
+    for (uint8_t i = 0; !changed && i < count && i < s_node_count; i++) {
+        changed = nodes[i].cot != s_nodes[i].cot ||
+                  nodes[i].online != s_nodes[i].online ||
+                  nodes[i].deaf != s_nodes[i].deaf;
+    }
+    if (nodes != NULL && count > 0) {
+        memcpy(s_nodes, nodes, sizeof(s_nodes[0]) * count);
+    }
+    s_node_count = count;
+    s_presence_known = true;
+
+    /* A change goes out at once: a cot that has just dropped off the
+     * air should not wait a minute to be noticed.  The first one goes
+     * out straight away too, so a hub that has just been set up appears
+     * on the dashboard before anyone has the chance to wonder whether
+     * it is there. */
+    if (changed) {
+        s_next_presence_us = 0;
+    }
+    xSemaphoreGive(s_presence_lock);
 }
 
 const char *crynet_net_device_id(void)
