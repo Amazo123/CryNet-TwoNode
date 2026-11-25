@@ -28,10 +28,16 @@ npx wrangler d1 create crynet                       # prints the database_id
 #   paste that id into wrangler.jsonc, then:
 npx wrangler d1 execute crynet --remote --file worker/schema.sql
 npx wrangler secret put UPLOAD_TOKEN        # the hub's token  (net token <value>)
-npx wrangler secret put DASHBOARD_PASSWORD  # the caregiver's login password
 ```
 
-The username is `caregiver` (change with `DASHBOARD_USER`).
+Since **D-109** the hosted copy is **public to read**: anyone with the link sees the
+page and every GET, because the record is the project's shop window (the owner
+points a portfolio at it) and the data is metadata — numbers, durations,
+confidences — never audio. **Writes are the only thing guarded**, and the token is
+the one secret that guards them. The old Basic login (`DASHBOARD_PASSWORD`,
+`DASHBOARD_USER`) is retired: a password that guards no reads must not quietly
+keep write access. Its secret still sits unused in Cloudflare's store, so a
+private mode is one deploy away.
 
 ## Deploy after a change
 
@@ -73,7 +79,7 @@ on the machine that runs the offline copy:
 
 ```
 CRYNET_TOKEN=<the UPLOAD_TOKEN value>
-CRYNET_PASSWORD=<the DASHBOARD_PASSWORD value>
+CRYNET_PASSWORD=<the retired password; unused since D-109>
 ```
 
 That file is what lets the offline dashboard be started against the same
@@ -116,7 +122,6 @@ offline server could be seeded from if the online copy ever went away.
 
 ```sh
 npx wrangler secret put UPLOAD_TOKEN        # then:  net token <new>   on the hub
-npx wrangler secret put DASHBOARD_PASSWORD  # the browser asks again next login
 ```
 
 ## Local development without touching the live copy

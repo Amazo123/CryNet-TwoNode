@@ -222,10 +222,10 @@ in this repository, and they are not the same secret.
 Two things differ from the local copy, both because it is on the public
 internet:
 
-- **It asks you to log in.** The local copy leaves the reads open (it is
-  on your own network); the hosted one puts a login in front of every
-  read, because an open dashboard on the internet is anyone else's
-  record of your baby's nights.
+- **It is public to read.** Since D-109 both copies are: anyone with the
+  link sees the page and every GET, because the record is the project's
+  shop window and the data is metadata, never audio. The hub's token is
+  the one secret, and it guards writes only.
 - **It counts days and nights in your timezone.** The hosted copy runs in
   UTC; the page tells it which zone it is looking at, so "last night"
   means your last night.

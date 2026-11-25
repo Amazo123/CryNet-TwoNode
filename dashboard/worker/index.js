@@ -483,35 +483,20 @@ async function safeEqual(a, b) {
   return crypto.subtle.timingSafeEqual(da, db);
 }
 
-/* The hub sends X-CryNet-Token (net token <value> on its console); the
-   caregiver's browser sends the Basic login it was asked for when the
-   page was opened.  With neither secret set — local development — every
-   request is allowed, exactly like server.py with no --token. */
-async function authorised(request, env) {
+/* Writes are the only thing a secret guards now (D-109).  The hub sends
+   X-CryNet-Token (net token <value> on its console), and every read — the
+   page and the GET endpoints — is public, so anyone with the link can see
+   the record: the data is metadata (numbers, durations, confidences), never
+   audio, and the record is the project's shop window.  With no token set —
+   local development — writes are allowed too, exactly like server.py with
+   no --token.  The old Basic login is retired: a password that guards no
+   reads must not quietly keep write access. */
+async function tokenOk(request, env) {
   const token = env.UPLOAD_TOKEN || '';
-  const pass = env.DASHBOARD_PASSWORD || '';
-  const user = env.DASHBOARD_USER || 'caregiver';
-  if (!token && !pass) return true;
-
+  if (!token) return true;
   const got = request.headers.get('X-CryNet-Token') || '';
-  if (token && got && (await safeEqual(got, token))) return true;
-
-  const h = request.headers.get('Authorization') || '';
-  if (pass && h.startsWith('Basic ')) {
-    let dec = '';
-    try { dec = atob(h.slice(6)); } catch (e) { return false; }
-    const i = dec.indexOf(':');
-    const u = i < 0 ? dec : dec.slice(0, i);
-    const p = i < 0 ? '' : dec.slice(i + 1);
-    if ((await safeEqual(u, user)) && (await safeEqual(p, pass))) return true;
-  }
-  return false;
-}
-
-function unauthorised() {
-  return json({ error: 'unauthorised' }, 401, {
-    'WWW-Authenticate': 'Basic realm="Amazing\'s CryNet", charset="UTF-8"',
-  });
+  if (!got) return false;
+  return safeEqual(got, token);
 }
 
 /* --------------------------------------------------------------- upload */
@@ -697,17 +682,16 @@ export default {
       }
 
       if (path === '/api/v1/events' && request.method === 'POST') {
-        if (!(await authorised(request, env))) return json({ error: 'unauthorised' }, 401);
+        if (!(await tokenOk(request, env))) return json({ error: 'unauthorised' }, 401);
         return await handleUpload(env.DB, request);
       }
 
       if (path === '/api/v1/presence' && request.method === 'POST') {
-        if (!(await authorised(request, env))) return json({ error: 'unauthorised' }, 401);
+        if (!(await tokenOk(request, env))) return json({ error: 'unauthorised' }, 401);
         return await handlePresence(env.DB, request);
       }
 
       if (path.startsWith('/api/')) {
-        if (!(await authorised(request, env))) return unauthorised();
         if (path === '/api/v1/devices') return json({ devices: await getDevices(env.DB) });
         if (path === '/api/v1/presence') return json(await buildPresence(env.DB));
         if (path === '/api/v1/summary') {
@@ -731,10 +715,8 @@ export default {
         return json({ error: 'not found' }, 404);
       }
 
-      // The page and its assets — behind the same login, so the browser
-      // asks once on opening the dashboard and then attaches it to every
-      // fetch the page makes.
-      if (!(await authorised(request, env))) return unauthorised();
+      // The page and its assets — public (D-109): anyone with the link
+      // sees the record, and every fetch the page makes is open too.
       return env.ASSETS.fetch(request);
     } catch (err) {
       return json({ error: 'internal', detail: String(err) }, 500);

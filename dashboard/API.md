@@ -15,12 +15,14 @@ Cloudflare's free tier. See `dashboard/worker/README.md` for how it is
 deployed and pointed at. It differs from the local copy in two ways, and
 both matter:
 
-- **Every read needs a login.** The local copy on a home network leaves
-  the GETs open; the hosted copy puts a login in front of them, because
-  on the internet an open `/api/v1/summary` publishes the baby's whole
-  cry record to anyone who finds the URL. The hub is unaffected: it
-  sends `X-CryNet-Token` on uploads, and the same token is accepted on
-  reads for scripts.
+- **Reads are public; writes need the token.** Since D-109 the hosted
+  copy is open to read — the page, and every GET — so a viewer with the
+  link sees the record; the data is metadata, never audio, and the
+  record is the project's shop window. The `POST` endpoints accept only
+  the hub's `X-CryNet-Token` (the old Basic login is retired: a password
+  that guards no reads must not quietly keep write access). The local
+  copy has always been open to read and takes the token on writes only
+  when `--token` is given.
 - **Reads may carry `?tz=<IANA zone>`.** Days, hours and nights are
   counted in that zone, which is how a copy hosted in UTC can still show
   the caregiver's own night. The page sends it automatically. With no
