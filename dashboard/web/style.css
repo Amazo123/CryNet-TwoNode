@@ -1,18 +1,36 @@
-/* CryNet — the caregiver's record.
+/* Amazing's CryNet — the caregiver's record.
  *
- * One theme, chosen and finished: a warm, light nursery surface.  The
- * page is deliberately quiet so the data is the only loud thing on it.
+ * Two themes, one identity: the teal of the hub's own glass.  Light mode
+ * keeps the warm nursery surface; dark mode is the hub panel's near-black
+ * teal, its exact values from hub_display.c (C_BG, C_SURFACE, C_SURFACE_HI,
+ * C_TEXT, C_DIM, C_ACCENT).  The page is deliberately quiet so the data is
+ * the only loud thing on it.
  *
- * Colour roles come from the validated reference palette.  The eight
- * categorical slots were checked with the palette validator against this
- * exact surface (#fcfcfb), light mode:
- *   lightness band PASS · chroma floor PASS · adjacent CVD PASS (worst 9.1)
- *   normal-vision floor PASS (worst 19.6) · contrast WARN on aqua/yellow/
- *   magenta -> the relief channel is shipped: every chart has a table twin
- *   and every cot mark carries a written "Cot n" label beside its colour.
+ * Colour roles come from the validated reference palette.  Slot 1 and the
+ * sequential ramp are teal — the hub's accent hue — in place of the
+ * reference blue; the other seven slots are unchanged.  Both modes were
+ * re-run through the palette validator against their own surfaces:
+ *   light (#fcfcfb): lightness PASS · chroma PASS · adjacent CVD PASS
+ *     (worst 9.1) · normal-vision PASS (worst 19.6) · contrast WARN on
+ *     aqua/yellow/magenta -> the relief channel is shipped: every chart
+ *     has a table twin and every cot mark carries a written "Cot n" label.
+ *   dark (#070f10): all PASS — worst adjacent CVD 8.4, normal-vision 19.3.
+ * Dark slot 1 is #23a893, the nearest passing step to the hub accent
+ * #2dd4bf, which is too light for the data band; the hub accent itself is
+ * kept for chrome (brand mark, tab underline, focus ring), where the band
+ * does not apply.  The theme is stamped on <html data-theme> before first
+ * paint by the inline script in index.html, so there is no flash.
  */
 
 :root {
+  --radius: 14px;
+  --radius-sm: 9px;
+  --gap: 16px;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root,
+[data-theme="light"] {
   color-scheme: light;
 
   /* surfaces & ink */
@@ -29,7 +47,7 @@
   --wash: rgba(11, 11, 11, 0.045);
 
   /* categorical slots — fixed order, assigned by cot, never re-ranked */
-  --series-1: #2a78d6;
+  --series-1: #0d9488;
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
@@ -39,17 +57,17 @@
   --series-8: #e34948;
   --series-other: #898781;
 
-  /* sequential ramp — one hue, light -> dark (magnitude only) */
-  --seq-100: #cde2fb;
-  --seq-150: #b7d3f6;
-  --seq-200: #9ec5f4;
-  --seq-250: #86b6ef;
-  --seq-300: #6da7ec;
-  --seq-350: #5598e7;
-  --seq-400: #3987e5;
-  --seq-450: #2a78d6;
-  --seq-500: #256abf;
-  --seq-550: #1c5cab;
+  /* sequential ramp — one hue (teal), light -> dark (magnitude only) */
+  --seq-100: #bce1de;
+  --seq-150: #a4d6d2;
+  --seq-200: #8bcbc7;
+  --seq-250: #73c0bb;
+  --seq-300: #5bb4af;
+  --seq-350: #43a9a3;
+  --seq-400: #2b9e97;
+  --seq-450: #0d9488;
+  --seq-500: #0b7e74;
+  --seq-550: #09685f;
 
   /* status — reserved, always shipped with an icon and a word */
   --good: #0ca30c;
@@ -57,10 +75,58 @@
   --serious: #ec835a;
   --critical: #d03b3b;
 
-  --radius: 14px;
-  --radius-sm: 9px;
-  --gap: 16px;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* chrome accent — the hub's teal, a touch deeper on the light surface */
+  --accent: #0d9488;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* the hub panel's own values (hub_display.c) */
+  --plane: #020404;          /* C_BG        (2, 4, 4)   */
+  --surface-1: #070f10;      /* C_SURFACE   (7, 15, 16) */
+  --surface-2: #0c1a1c;      /* C_SURFACE_HI (12, 26, 28) */
+  --text-primary: #e4f0ec;   /* C_TEXT      (228, 240, 236) */
+  --text-secondary: #7a9692; /* C_DIM       (122, 150, 146) */
+  --text-muted: #5f7a76;
+  --grid: #182626;
+  --axis: #344a48;
+  --border: rgba(228, 240, 236, 0.12);
+  --border-strong: rgba(228, 240, 236, 0.22);
+  --wash: rgba(228, 240, 236, 0.05);
+
+  /* the same eight hues, stepped for the dark surface (validated) */
+  --series-1: #23a893;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #7a9692;
+
+  /* sequential ramp — one hue (teal), dim -> bright on the dark ground;
+   * the top step is the hub accent itself */
+  --seq-100: #0f2f2c;
+  --seq-150: #12413c;
+  --seq-200: #16544d;
+  --seq-250: #19665d;
+  --seq-300: #1c786d;
+  --seq-350: #208a7e;
+  --seq-400: #239d8e;
+  --seq-450: #26af9e;
+  --seq-500: #2ac1af;
+  --seq-550: #2dd4bf;
+
+  /* status — the same four steps; all clear 3:1 on this darker surface */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+
+  /* chrome accent — the hub accent, exactly (C_ACCENT 45, 212, 191) */
+  --accent: #2dd4bf;
 }
 
 * { box-sizing: border-box; }
@@ -105,7 +171,7 @@ html, body {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--series-1);
+  background: var(--accent);
   align-self: center;
   flex: none;
 }
@@ -173,7 +239,7 @@ html, body {
 .tab:hover { background: var(--wash); }
 .tab[aria-selected="true"] {
   color: var(--text-primary);
-  border-bottom-color: var(--series-1);
+  border-bottom-color: var(--accent);
 }
 
 .controls {
@@ -243,9 +309,33 @@ select:focus-visible,
 svg:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--series-1);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* The theme toggle: moon while light (click for dark), sun while dark. */
+.theme-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex: none;
+  align-self: center;
+}
+
+.theme-toggle:hover { color: var(--accent); background: var(--wash); }
+.theme-toggle .ico { width: 15px; height: 15px; display: block; }
+.theme-toggle .ico-sun { display: none; }
+[data-theme="dark"] .theme-toggle .ico-sun { display: block; }
+[data-theme="dark"] .theme-toggle .ico-moon { display: none; }
 
 .scope-note {
   font-size: 12.5px;
@@ -560,6 +650,9 @@ table.data td .sub { display: block; font-size: 11.5px; color: var(--text-second
 }
 
 .empty svg { display: block; margin: 0 auto 16px; }
+.empty .art-line { stroke: var(--axis); }
+.empty .art-soft { stroke: var(--grid); }
+.empty .art-dot { fill: var(--seq-100); }
 .empty h2 { font-size: 18px; font-weight: 620; margin: 0 0 8px; }
 .empty p {
   margin: 0 auto 6px;
@@ -582,6 +675,13 @@ table.data td .sub { display: block; font-size: 11.5px; color: var(--text-second
   padding: 18px 0 10px;
 }
 
+/* Heatmap cell numbers wear ink, never the cell's colour: white on the
+ * deep end of the light ramp, near-black on the bright end of the dark
+ * ramp (which runs the other way). */
+.heat-lo { fill: var(--text-primary); }
+.heat-hi { fill: #ffffff; }
+[data-theme="dark"] .heat-hi { fill: #020404; }
+
 /* --------------------------------------------------------------- tooltip */
 
 .tooltip {
@@ -599,6 +699,7 @@ table.data td .sub { display: block; font-size: 11.5px; color: var(--text-second
 }
 
 .tooltip[hidden] { display: none; }
+[data-theme="dark"] .tooltip { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5); }
 .tooltip .tt-title { color: var(--text-secondary); font-size: 11.5px; margin-bottom: 5px; }
 .tooltip .tt-row { display: flex; align-items: center; gap: 7px; margin-top: 3px; }
 .tooltip .tt-key { width: 12px; height: 3px; border-radius: 2px; flex: none; }

@@ -3,19 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>CryNet — the cry record</title>
+<meta name="color-scheme" content="light dark">
+<title>Amazing's CryNet — the cry record</title>
 <link rel="stylesheet" href="style.css">
+<script>
+  /* Stamp the theme before first paint: the saved choice, else the OS
+   * setting.  app.js keeps it in step afterwards. */
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('crynet-theme'); } catch (e) { /* private mode */ }
+    if (t !== 'light' && t !== 'dark') {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 </head>
 <body>
 <div class="app">
 
   <header class="topbar">
-    <div class="brand"><span class="mark" aria-hidden="true"></span>CryNet<span class="sub">the cry record</span></div>
+    <div class="brand"><span class="mark" aria-hidden="true"></span>Amazing's CryNet<span class="sub">the cry record</span></div>
     <div class="hubmeta" id="hubmeta"></div>
     <div class="conn" id="conn" data-state="loading" role="status" aria-live="polite">
       <span class="dot" aria-hidden="true"></span><span id="conn-text">Connecting</span>
     </div>
+    <button class="theme-toggle" id="theme" type="button" aria-label="Switch to dark theme">
+      <svg class="ico ico-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M13.4 9.6A5.6 5.6 0 0 1 6.4 2.6a5.6 5.6 0 1 0 7 7z"/>
+      </svg>
+      <svg class="ico ico-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="8" cy="8" r="3.1"/>
+        <path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/>
+      </svg>
+    </button>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Views">
@@ -49,10 +71,10 @@
     <section id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="-1">
       <div class="empty" id="empty-overview" hidden>
         <svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true">
-          <rect x="8" y="22" width="56" height="24" rx="6" fill="none" stroke="#c3c2b7" stroke-width="2"/>
-          <path d="M18 22V14M30 22V14M42 22V14M54 22V14" stroke="#e1e0d9" stroke-width="2" stroke-linecap="round"/>
-          <path d="M14 46v6M58 46v6" stroke="#c3c2b7" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="36" cy="34" r="4" fill="#cde2fb"/>
+          <rect x="8" y="22" width="56" height="24" rx="6" fill="none" class="art-line" stroke-width="2"/>
+          <path d="M18 22V14M30 22V14M42 22V14M54 22V14" class="art-soft" stroke-width="2" stroke-linecap="round"/>
+          <path d="M14 46v6M58 46v6" class="art-line" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="36" cy="34" r="4" class="art-dot"/>
         </svg>
         <h2>Nothing has been uploaded yet</h2>
         <p id="empty-overview-detail">The hub has not sent any cry records to this dashboard. Once it reaches the network it uploads what it has stored, and the record appears here.</p>
@@ -69,8 +91,8 @@
     <section id="view-patterns" role="tabpanel" aria-labelledby="tab-patterns" tabindex="-1" hidden>
       <div class="empty" id="empty-patterns" hidden>
         <svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true">
-          <path d="M10 42h52" stroke="#c3c2b7" stroke-width="2" stroke-linecap="round"/>
-          <path d="M18 42V30M30 42V34M42 42V26M54 42V36" stroke="#e1e0d9" stroke-width="4" stroke-linecap="round"/>
+          <path d="M10 42h52" class="art-line" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18 42V30M30 42V34M42 42V26M54 42V36" class="art-soft" stroke-width="4" stroke-linecap="round"/>
         </svg>
         <h2>No patterns to show yet</h2>
         <p>Patterns need a few recorded cries. When the hub uploads its first episodes, the durations, the nights and the gaps between cries appear here.</p>

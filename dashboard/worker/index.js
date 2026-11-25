@@ -510,7 +510,7 @@ async function authorised(request, env) {
 
 function unauthorised() {
   return json({ error: 'unauthorised' }, 401, {
-    'WWW-Authenticate': 'Basic realm="CryNet", charset="UTF-8"',
+    'WWW-Authenticate': 'Basic realm="Amazing\'s CryNet", charset="UTF-8"',
   });
 }
 

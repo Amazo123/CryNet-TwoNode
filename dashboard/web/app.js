@@ -1,4 +1,4 @@
-/* CryNet — the caregiver's record.
+/* Amazing's CryNet — the caregiver's record.
  *
  * Plain ES2019-ish vanilla JS.  No modules, no dependencies, no build step;
  * it is loaded with a plain <script src="app.js">.
@@ -225,7 +225,7 @@
   /* --------------------------------------------------------------- state */
 
   var ids = {};
-  var ID_LIST = ['hubmeta', 'conn', 'conn-text', 'tab-overview', 'tab-patterns',
+  var ID_LIST = ['hubmeta', 'conn', 'conn-text', 'theme', 'tab-overview', 'tab-patterns',
     'range', 'cot', 'device', 'device-control', 'scope-note', 'view-overview',
     'view-patterns', 'empty-overview', 'empty-overview-detail', 'overview-body',
     'kpis', 'untimed-note', 'system-strip', 'overview-grid', 'empty-patterns',
@@ -1337,6 +1337,7 @@
     var W = hostWidth(host);
     if (!W) return;
     clear(host);
+    var darkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
     var padL = 62, padR = 6, padT = 16, padB = 22;
     cots.forEach(function (c) {
       padL = Math.max(padL, cotName(c.cot).length * 6.6 + 12);
@@ -1382,10 +1383,15 @@
           fill: fill, stroke: v('--grid'), 'stroke-width': '0.5', rx: 2
         }));
         if (val > 0 && cellW >= 17) {
+          /* The number wears ink, not the cell's colour: white on the deep
+           * end of the light ramp, near-black on the bright end of the dark
+           * ramp.  The dark ramp runs the other way, so its switch sits one
+           * step earlier. */
+          var hi = lvl >= (darkTheme ? 3 : 4);
           svg.appendChild(svgEl('text', {
             x: x + cellW / 2, y: y + rowH / 2 + 3, 'text-anchor': 'middle',
             'font-size': '10.5', 'font-weight': '600',
-            fill: lvl >= 4 ? '#ffffff' : v('--text-primary'), text: String(val)
+            class: hi ? 'heat-hi' : 'heat-lo', text: String(val)
           }));
         }
         var hit = svgEl('rect', {
@@ -1761,6 +1767,43 @@
         setTab(next === 0 ? 'overview' : 'patterns');
       });
     });
+
+    /* The theme.  The inline script in <head> has already stamped the
+     * saved choice (or the OS setting) before first paint; this keeps the
+     * button's label honest, remembers a deliberate choice, and follows
+     * the OS live while no choice has been made.  Charts are redrawn so
+     * the heatmap's cell numbers pick the right ink for the new ramp. */
+    function themeName() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+    function themeLabel() {
+      if (ids.theme) {
+        ids.theme.setAttribute('aria-label',
+          themeName() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+      }
+    }
+    themeLabel();
+    if (ids.theme) {
+      ids.theme.addEventListener('click', function () {
+        var next = themeName() === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('crynet-theme', next); } catch (e) { /* private mode */ }
+        themeLabel();
+        drawCharts();
+      });
+    }
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var followOS = function () {
+        var stored = null;
+        try { stored = localStorage.getItem('crynet-theme'); } catch (e) { /* keep null */ }
+        if (stored === 'light' || stored === 'dark') return;
+        document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
+        themeLabel();
+        drawCharts();
+      };
+      if (mq.addEventListener) mq.addEventListener('change', followOS);
+    }
 
     ids.range.addEventListener('click', function (ev) {
       var btn = ev.target.closest ? ev.target.closest('button[data-days]') : null;
