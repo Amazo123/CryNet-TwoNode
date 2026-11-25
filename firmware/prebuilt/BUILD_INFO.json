@@ -66,7 +66,7 @@
         "firmware/hub_infer/components/crynet_model/reference/crynet_int8.tflite": "4aef55d8cfc0fb75aa944e73945ef5b832f12d71479c48f82aff58563126bc11",
         "firmware/hub_infer/components/crynet_model/reference/metrics.json": "03d12b50b8eab657d88461641dec64e3a4a52ecadb354cbc04664fb1e7851cdc",
         "firmware/hub_infer/components/crynet_net/CMakeLists.txt": "cc483be7c142b5bd4a1391b1bea003716ceb4669a2d5632b5599dea7c2ded500",
-        "firmware/hub_infer/components/crynet_net/crynet_net.c": "a1212bf46d7ef3501b7fb94313a02157b166b1ee12650e827d0b5b3382ef28e1",
+        "firmware/hub_infer/components/crynet_net/crynet_net.c": "89c4019fa20de9c5d3de3317446cf3e649a54898ee1236d981a83f2713461e69",
         "firmware/hub_infer/components/crynet_net/include/crynet_net.h": "faf0f5d0225e54a2fdbbcea7e4e89e51219aa3ab1b358d6c774cea3aa611cf10",
         "firmware/hub_infer/components/crynet_proto/CMakeLists.txt": "1b8d66e8014ea1af60893fb3c00317991a31216d7c586b72e08025567f464579",
         "firmware/hub_infer/components/crynet_proto/crynet_proto.c": "cbc2cda02070788e2116ada0b2267504ec43ebb4c538ad8316674f53b89b38e1",
@@ -83,7 +83,7 @@
         "firmware/hub_infer/dependencies.lock": "6923506ab28bbcd25b26f90db7403ff404ac128a095a48ce5cd1bac56c6c6074",
         "firmware/hub_infer/partitions_16mb.csv": "ba922656212139c51d98a7b6bfe78ff17ebacd48aeb168b756026162337c10a7",
         "firmware/hub_infer/platformio.ini": "248092a6cc420f57be1108ad9b77655ebf3041fca0f02b1487691d99b209d72c",
-        "firmware/hub_infer/sdkconfig.defaults": "b47f9e13611d9bc8e8275e5e2f0c1daa2ff95b519968eeaf8560f334e4a54c4c",
+        "firmware/hub_infer/sdkconfig.defaults": "ed566e4679766d1c6c2bc9f25d2b77584b4fc2d0372da79add90438a216ffee4",
         "firmware/hub_infer/src/CMakeLists.txt": "0ceac4fef551f4bbd68e183279d36aa8f18fde5d32db77569eb7b70eb779c620",
         "firmware/hub_infer/src/console.c": "23a3351bdcaab86a230e95412a9349216af2a18e963b588316bf9cce24ef9c51",
         "firmware/hub_infer/src/console.h": "e5899803e42dd1843f4a621e772c076a59e8fcc6dc65206c6f44b2e6e93dab9e",
@@ -95,10 +95,10 @@
         "firmware/tools/fetch_deps.sh": "41143522bc5ac4f50559dcd21444fdc56b5a15dd16e942b3600d69da705b3a42",
         "firmware/tools/patch_deps.py": "16560caf7c506e8d27115644a52e3812335ec448adee3c6afca513fe29f22f6c"
       },
-      "source_fingerprint": "e309ef595377796b8c92c5beb45b973cb2e13cfa127abb6370da6a09a1491dc7",
+      "source_fingerprint": "a2e67b37a9c474a65742f78591556e2d6e6aed760a8ba48140f7891ae6102d30",
       "images": {
         "bootloader.bin": "aefe21ad9f40735b7ebc07c2b6ad3eeb440477baed575bfc205f78a043c6282e",
-        "firmware.bin": "cd126d90d16bfb51a01b4f34a4a8f605386bb824463642ea39862e7a45477ca2",
+        "firmware.bin": "3c10f0757e31a83f16a623658d7bc0bc07a913ee87372a61a2097abb3ca9a8f8",
         "partitions.bin": "463793a642ab4a905bd6b4c0b07c749d4ba199ef459b0a91450ca21c0cd581d4"
       }
     },

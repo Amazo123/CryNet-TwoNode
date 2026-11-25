@@ -764,7 +764,9 @@ bool crynet_net_start(void)
         return true;
     }
 
-    BaseType_t ok = xTaskCreate(net_task, "crynet", 6144, NULL, 3, NULL);
+    /* HTTPS posts run their TLS handshake on this task's stack.  Give it
+     * extra headroom; the observed overflow was on the separate main task. */
+    BaseType_t ok = xTaskCreate(net_task, "crynet", 8192, NULL, 3, NULL);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "cannot start the uploader; the log still records");
         return false;

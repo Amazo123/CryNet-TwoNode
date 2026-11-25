@@ -35,6 +35,16 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # FreeRTOS — 2 timers extra, larger task stack for the inference task
 CONFIG_FREERTOS_HZ=1000
 
+# Task main's stack.  app_main never returns in this firmware: the live
+# link/inference loop (link_stage_run) runs on the main task until the
+# power is pulled, so everything it does spends this one stack.  3584 was
+# ESP-IDF's default for an app_main that spawns its workers and returns,
+# and the hub crashed with "a stack overflow in task main" under it
+# (D-107).  The corrupted backtrace cannot name the deepest frame, so the
+# size is chosen for headroom, not for one call path.  16 KB costs
+# 12.8 KB of internal RAM and nothing at runtime.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
 # Logging
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
