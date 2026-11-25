@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_start ON events (start_at);
 CREATE INDEX IF NOT EXISTS idx_events_kind  ON events (kind);
+
+CREATE TABLE IF NOT EXISTS presence (
+    device  TEXT NOT NULL,
+    cot     INTEGER NOT NULL,
+    online  INTEGER NOT NULL,
+    deaf    INTEGER NOT NULL DEFAULT 0,
+    rssi    INTEGER,
+    at      INTEGER,
+    PRIMARY KEY (device, cot)
+);
 """
 
 
@@ -184,6 +194,58 @@ class Store:
                 "   last_seen=excluded.last_seen",
                 (device, name or None, fw or None, now, now),
             )
+
+    def presence(self, device: str, nodes: list[dict], fw: str = "",
+                 name: str = "") -> int:
+        """Say who is here.
+
+        The cots have no network of their own -- they talk to the hub
+        over its radio -- so the hub is the only thing that can answer
+        for them, and this is the whole of the hub's own report.  One
+        row per cot, replaced each time the hub speaks, so what is
+        stored is always the last thing the hub knew.
+
+        The hub's own last_seen moves too: a hub that is talking is a
+        hub that is there, whatever it has to say.
+        """
+        db = self.connect()
+        now = int(time.time())
+        written = 0
+        with db:
+            db.execute(
+                "INSERT INTO devices (device, name, fw, first_seen, last_seen)"
+                " VALUES (?,?,?,?,?)"
+                " ON CONFLICT(device) DO UPDATE SET"
+                "   name=COALESCE(excluded.name, devices.name),"
+                "   fw=COALESCE(excluded.fw, devices.fw),"
+                "   last_seen=excluded.last_seen",
+                (device, name or None, fw or None, now, now),
+            )
+            for n in nodes:
+                cot = _int_or_none(n.get("cot"))
+                if cot is None:
+                    continue
+                db.execute(
+                    "INSERT INTO presence (device, cot, online, deaf, rssi, at)"
+                    " VALUES (?,?,?,?,?,?)"
+                    " ON CONFLICT(device, cot) DO UPDATE SET"
+                    "   online=excluded.online,"
+                    "   deaf=excluded.deaf,"
+                    "   rssi=excluded.rssi,"
+                    "   at=excluded.at",
+                    (device, cot,
+                     1 if n.get("online") else 0,
+                     1 if n.get("deaf") else 0,
+                     _int_or_none(n.get("rssi")), now),
+                )
+                written += 1
+        return written
+
+    def presence_rows(self) -> list[dict]:
+        rows = self.connect().execute(
+            "SELECT * FROM presence ORDER BY device, cot"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # -- reading ---------------------------------------------------------
 
@@ -297,6 +359,60 @@ def night_key(ts: int, lt=make_local()) -> str:
 
 def local_date(ts: int, lt=make_local()) -> str:
     return lt(ts).date().isoformat()
+
+
+# A hub is taken to be there if it has said something in the last three
+# minutes.  The hub says once a minute, so three is three chances
+# missed before the dashboard calls it gone -- long enough that one
+# dropped request does not make the caregiver think the hub has died,
+# short enough that a hub that has been switched off is gone before
+# anyone has looked away.
+PRESENCE_STALE_S = 180
+
+
+def build_presence(store: Store) -> dict:
+    """Who is here: the hubs, and the cots each hub can see.
+
+    This is separate from the cry record on purpose.  A record says
+    what happened; this says whether the thing that watches is working.
+    A dashboard that only learns of a hub when a baby cries cannot tell
+    the caregiver whether a quiet week means a quiet baby or a dead hub,
+    and that is the question a person actually opens the dashboard to
+    ask.
+    """
+    now = int(time.time())
+    hubs = []
+    demo = set()
+    for d in store.devices():
+        seen = int(d.get("last_seen") or 0)
+        is_demo = (d.get("fw") or "") == "demo"
+        if is_demo:
+            demo.add(d.get("device"))
+        hubs.append({
+            "device": d.get("device"),
+            "name": d.get("name"),
+            "fw": d.get("fw"),
+            "at": seen,
+            "age_s": (now - seen) if seen else None,
+            # The demo hub is not a thing that can go offline -- it is a
+            # made-up hub with made-up records and nothing posting it.
+            # Holding it offline would show the panel working exactly
+            # when it is not, which is the one thing a demo must not do.
+            "online": is_demo or (bool(seen) and (now - seen) <= PRESENCE_STALE_S),
+            "demo": is_demo,
+        })
+    nodes = []
+    for p in store.presence_rows():
+        is_demo = p.get("device") in demo
+        nodes.append({
+            "device": p.get("device"),
+            "cot": p.get("cot"),
+            "online": is_demo or bool(p.get("online")),
+            "deaf": bool(p.get("deaf")),
+            "rssi": p.get("rssi"),
+            "at": p.get("at"),
+        })
+    return {"now": now, "hubs": hubs, "nodes": nodes}
 
 
 def build_summary(store: Store, days: int, cot: int = 0, tz: str = "") -> dict:
@@ -657,6 +773,14 @@ def seed_demo(store: Store, days: int = 7) -> None:
                     "boot": 1, "uptime_ms": 0,
                 }, fw="demo", name="Demo hub")
 
+    # The demo hub also says who is here, so the presence panel has
+    # something to draw.  Both cots are answering: one of them well,
+    # one of them on the edge, which is what a real room looks like.
+    store.presence(device, [
+        {"cot": 1, "online": True, "deaf": False, "rssi": -47},
+        {"cot": 2, "online": True, "deaf": False, "rssi": -63},
+    ], fw="demo", name="Demo hub")
+
 
 # --------------------------------------------------------------------------
 # the HTTP service
@@ -724,6 +848,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/devices":
             return self._send_json({"devices": self.store.devices()})
 
+        if path == "/api/v1/presence":
+            return self._send_json(build_presence(self.store))
+
         if path == "/api/v1/summary":
             days = int(_first(query, "days", 14))
             cot = int(_first(query, "cot", 0) or 0)
@@ -775,6 +902,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({
                 "accepted": accepted,
                 "received": len(events),
+                "server_time": int(time.time()),
+            })
+
+        if path == "/api/v1/presence":
+            if not self._authorised():
+                return self._send_json({"error": "unauthorised"}, 401)
+            device = str(body.get("device") or "unknown")
+            hub = body.get("hub") or {}
+            nodes = body.get("nodes") or []
+            if not isinstance(nodes, list):
+                nodes = []
+            written = self.store.presence(device, nodes,
+                                          str(hub.get("fw", "")),
+                                          str(hub.get("name", "")))
+            print(f"[dashboard] {device}: presence, {written} cot(s)")
+            return self._send_json({
+                "ok": True,
+                "cots": written,
                 "server_time": int(time.time()),
             })
 

@@ -131,6 +131,13 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute has to beat every `display` set below it.
+ * A class rule like `.control { display: flex }` outranks the browser's
+ * own `[hidden] { display: none }`, so anything toggled with `hidden`
+ * would stay on the page.  This one line makes `hidden` mean hidden
+ * everywhere. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -183,11 +190,28 @@ html, body {
 }
 
 .hubmeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 13px;
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* The hub's own state: green while it is talking to the dashboard,
+ * amber once it has gone quiet.  The word beside it carries the state
+ * too, so nothing here depends on the colour being seen. */
+.hubmeta-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.hubmeta[data-state="on"] .hubmeta-dot { background: var(--good); }
+.hubmeta[data-state="off"] .hubmeta-dot { background: var(--warning); }
 
 .conn {
   display: inline-flex;
@@ -520,6 +544,59 @@ a:focus-visible,
 .card-body { margin-top: 10px; }
 .chart-host { display: block; }
 .chart-host svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* ------------------------------------------------------------- presence */
+
+/* Who is here.  The hub, and each cot it can see, as pills on a strip
+ * of their own -- the same shape as the system strip below it, because
+ * they answer the same kind of question: what is the state of the
+ * machine right now. */
+.presence-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: var(--gap);
+  font-size: 13px;
+}
+
+.presence-strip .strip-label {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  margin-right: 2px;
+}
+
+.presence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  background: var(--plane);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.presence-chip .presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+  display: block;
+}
+
+.presence-chip[data-state="on"] .presence-dot { background: var(--good); }
+.presence-chip[data-state="off"] .presence-dot { background: var(--text-muted); }
+.presence-chip[data-state="deaf"] .presence-dot { background: var(--warning); }
+
+.presence-chip .p-word { color: var(--text-secondary); }
+.presence-chip .p-detail { color: var(--text-muted); font-size: 12px; }
 
 .legend {
   display: flex;

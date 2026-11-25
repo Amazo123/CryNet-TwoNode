@@ -226,6 +226,79 @@ at the top of `web/app.js`.
                  "fw": "2.0-dashboard", "first_seen": ..., "last_seen": ... } ] }
 ```
 
+---
+
+## `POST /api/v1/presence` — the hub says who is here
+
+The cots have no network of their own — they talk to the hub over its
+radio — so the hub is the only thing that can answer for them. It posts
+this **once a minute**, and again immediately whenever a cot's state
+changes, whether or not there is anything to record.
+
+The owner still configures **one** address: the presence endpoint is the
+events endpoint with its last path segment changed, so
+`net set https://…/api/v1/events` needs no second setting.
+
+Request:
+
+```json
+{
+  "device": "hub-7c9ebd12",
+  "hub": { "fw": "2.0-dashboard", "name": "Nursery hub" },
+  "nodes": [
+    { "cot": 1, "online": true, "deaf": false, "rssi": -47 },
+    { "cot": 2, "online": false, "deaf": false, "rssi": 0 }
+  ]
+}
+```
+
+| field | type | meaning |
+|---|---|---|
+| `nodes[].cot` | int | the cot number, 1-based |
+| `nodes[].online` | bool | the hub has heard from it lately |
+| `nodes[].deaf` | bool | the hub cannot get a window from it, so it cannot announce a cry from it |
+| `nodes[].rssi` | int | the telemetry signal strength in dBm; `0` = unknown |
+
+Response:
+
+```json
+{ "ok": true, "cots": 2, "server_time": 1794182435 }
+```
+
+One row per cot is stored, replaced each time the hub speaks, so what is
+stored is always the last thing the hub knew.
+
+---
+
+## `GET /api/v1/presence`
+
+Who is here: the hubs, and the cots each hub can see.
+
+```json
+{
+  "now": 1794182435,
+  "hubs": [
+    { "device": "hub-7c9ebd12", "name": "Nursery hub", "fw": "2.0-dashboard",
+      "at": 1794182435, "age_s": 0, "online": true, "demo": false }
+  ],
+  "nodes": [
+    { "device": "hub-7c9ebd12", "cot": 1, "online": true,
+      "deaf": false, "rssi": -47, "at": 1794182435 }
+  ]
+}
+```
+
+A hub is taken to be **there** if it has spoken in the last three
+minutes. The hub says once a minute, so three is three chances missed
+before the dashboard calls it gone: long enough that one dropped request
+does not make the caregiver think the hub has died, short enough that a
+hub that has been switched off is gone before anyone has looked away.
+
+A cot's `online` is what the hub last said about it. `deaf` is a
+separate thing: a cot can be answering and still deaf, which means it
+is transmitting and the hub cannot get a window from it, so it cannot
+announce a cry.
+
 ## `GET /api/v1/health`
 
 ```json

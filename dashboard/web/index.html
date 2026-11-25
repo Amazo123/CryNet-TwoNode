@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Amazing's CryNet — the cry record</title>
+<title>Amazing's CryNet</title>
 <link rel="stylesheet" href="style.css">
 <script>
   /* Stamp the theme before first paint: the saved choice, else the OS
@@ -24,8 +24,10 @@
 <div class="app">
 
   <header class="topbar">
-    <div class="brand"><span class="mark" aria-hidden="true"></span>Amazing's CryNet<span class="sub">the cry record</span></div>
-    <div class="hubmeta" id="hubmeta"></div>
+    <div class="brand"><span class="mark" aria-hidden="true"></span>Amazing's CryNet</div>
+    <div class="hubmeta" id="hubmeta" data-state="none">
+      <span class="hubmeta-dot" aria-hidden="true"></span><span id="hubmeta-text"></span>
+    </div>
     <div class="conn" id="conn" data-state="loading" role="status" aria-live="polite">
       <span class="dot" aria-hidden="true"></span><span id="conn-text">Connecting</span>
     </div>
@@ -76,13 +78,13 @@
           <path d="M14 46v6M58 46v6" class="art-line" stroke-width="2" stroke-linecap="round"/>
           <circle cx="36" cy="34" r="4" class="art-dot"/>
         </svg>
-        <h2>Nothing has been uploaded yet</h2>
-        <p id="empty-overview-detail">The hub has not sent any cry records to this dashboard. Once it reaches the network it uploads what it has stored, and the record appears here.</p>
-        <p>Everything the hub hears is kept on the hub itself until then — nothing is lost.</p>
+        <h2>No records yet</h2>
+        <p id="empty-overview-detail">The hub has not reached the dashboard. It keeps every cry in its own flash and uploads it when it can.</p>
       </div>
       <div id="overview-body" hidden>
         <div class="kpis" id="kpis"></div>
         <p class="card-note" id="untimed-note" hidden></p>
+        <div class="presence-strip" id="presence-strip" hidden></div>
         <div class="system-strip" id="system-strip" hidden></div>
         <div class="grid" id="overview-grid"></div>
       </div>
@@ -94,8 +96,8 @@
           <path d="M10 42h52" class="art-line" stroke-width="2" stroke-linecap="round"/>
           <path d="M18 42V30M30 42V34M42 42V26M54 42V36" class="art-soft" stroke-width="4" stroke-linecap="round"/>
         </svg>
-        <h2>No patterns to show yet</h2>
-        <p>Patterns need a few recorded cries. When the hub uploads its first episodes, the durations, the nights and the gaps between cries appear here.</p>
+        <h2>No patterns yet</h2>
+        <p>Durations, nights and gaps appear once the hub has uploaded a few episodes.</p>
       </div>
       <div id="patterns-body" hidden>
         <p class="scope-note" id="patterns-scope" hidden></p>

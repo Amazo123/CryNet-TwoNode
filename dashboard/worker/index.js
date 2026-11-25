@@ -572,6 +572,100 @@ async function handleUpload(db, request) {
   return json({ accepted, received: evs.length, server_time: now });
 }
 
+/* ------------------------------------------------------------- presence */
+
+/* A hub is taken to be there if it has said something in the last three
+   minutes.  The hub says once a minute, so three is three chances missed
+   before the dashboard calls it gone. */
+const PRESENCE_STALE_S = 180;
+
+/* Mirrors server.py's build_presence(): who is here, and which of them
+   is still answering.  A record says what happened; this says whether the
+   thing that watches is working, which is the other question. */
+async function buildPresence(db) {
+  const now = Math.floor(Date.now() / 1000);
+  const devices = await getDevices(db);
+  const demo = new Set();
+  const hubs = devices.map((d) => {
+    const seen = Number(d.last_seen) || 0;
+    const isDemo = (d.fw || '') === 'demo';
+    if (isDemo) demo.add(d.device);
+    return {
+      device: d.device,
+      name: d.name,
+      fw: d.fw,
+      at: seen,
+      age_s: seen ? now - seen : null,
+      // The demo hub is not a thing that can go offline -- it is a made-up
+      // hub with nothing posting it.
+      online: isDemo || (!!seen && now - seen <= PRESENCE_STALE_S),
+      demo: isDemo,
+    };
+  });
+  const r = await db.prepare('SELECT * FROM presence ORDER BY device, cot').all();
+  const nodes = (r.results || []).map((p) => ({
+    device: p.device,
+    cot: p.cot,
+    online: demo.has(p.device) || !!p.online,
+    deaf: !!p.deaf,
+    rssi: p.rssi,
+    at: p.at,
+  }));
+  return { now, hubs, nodes };
+}
+
+/* The hub says who is here.  One row per cot, replaced each time, so
+   what is stored is always the last thing the hub knew. */
+async function handlePresence(db, request) {
+  let body;
+  try { body = await request.json(); } catch (e) {
+    return json({ error: 'bad json' }, 400);
+  }
+  const device = String((body && body.device) || 'unknown');
+  const hub = (body && body.hub) || {};
+  const fw = String(hub.fw ?? '');
+  const name = String(hub.name ?? '');
+  const now = Math.floor(Date.now() / 1000);
+  const nodes = Array.isArray(body && body.nodes) ? body.nodes : [];
+
+  const stmts = [
+    db.prepare(
+      'INSERT INTO devices (device, name, fw, first_seen, last_seen)' +
+      ' VALUES (?,?,?,?,?)' +
+      ' ON CONFLICT(device) DO UPDATE SET' +
+      '   name=COALESCE(excluded.name, devices.name),' +
+      '   fw=COALESCE(excluded.fw, devices.fw),' +
+      '   last_seen=excluded.last_seen'
+    ).bind(device, name || null, fw || null, now, now),
+  ];
+  let written = 0;
+  for (const n of nodes) {
+    const cot = toInt(n && n.cot);
+    if (cot === null || cot === undefined) continue;
+    stmts.push(
+      db.prepare(
+        'INSERT INTO presence (device, cot, online, deaf, rssi, at)' +
+        ' VALUES (?,?,?,?,?,?)' +
+        ' ON CONFLICT(device, cot) DO UPDATE SET' +
+        '   online=excluded.online,' +
+        '   deaf=excluded.deaf,' +
+        '   rssi=excluded.rssi,' +
+        '   at=excluded.at'
+      ).bind(
+        device,
+        cot,
+        n && n.online ? 1 : 0,
+        n && n.deaf ? 1 : 0,
+        toInt(n && n.rssi),
+        now
+      )
+    );
+    written++;
+  }
+  await db.batch(stmts);
+  return json({ ok: true, cots: written, server_time: now });
+}
+
 /* --------------------------------------------------------------- router */
 
 export default {
@@ -590,9 +684,15 @@ export default {
         return await handleUpload(env.DB, request);
       }
 
+      if (path === '/api/v1/presence' && request.method === 'POST') {
+        if (!(await authorised(request, env))) return json({ error: 'unauthorised' }, 401);
+        return await handlePresence(env.DB, request);
+      }
+
       if (path.startsWith('/api/')) {
         if (!(await authorised(request, env))) return unauthorised();
         if (path === '/api/v1/devices') return json({ devices: await getDevices(env.DB) });
+        if (path === '/api/v1/presence') return json(await buildPresence(env.DB));
         if (path === '/api/v1/summary') {
           return json(
             await buildSummary(env.DB, intParam(q.get('days'), 14), intParam(q.get('cot'), 0), q.get('tz') || '')

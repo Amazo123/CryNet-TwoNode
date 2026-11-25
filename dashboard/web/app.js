@@ -225,10 +225,12 @@
   /* --------------------------------------------------------------- state */
 
   var ids = {};
-  var ID_LIST = ['hubmeta', 'conn', 'conn-text', 'theme', 'tab-overview', 'tab-patterns',
+  var ID_LIST = ['hubmeta', 'hubmeta-text', 'conn', 'conn-text', 'theme',
+    'tab-overview', 'tab-patterns',
     'range', 'cot', 'device', 'device-control', 'scope-note', 'view-overview',
     'view-patterns', 'empty-overview', 'empty-overview-detail', 'overview-body',
-    'kpis', 'untimed-note', 'system-strip', 'overview-grid', 'empty-patterns',
+    'kpis', 'untimed-note', 'presence-strip', 'system-strip', 'overview-grid',
+    'empty-patterns',
     'patterns-body', 'patterns-scope', 'patterns-grid', 'footer-range',
     'footer-updated', 'tooltip'];
 
@@ -240,6 +242,7 @@
     summary: null,
     analytics: null,
     devices: [],
+    presence: null,
     system: [],
     systemOk: true,
     counts: null,
@@ -296,14 +299,16 @@
       soft('/summary' + q),
       soft('/analytics?days=' + state.days),
       soft('/devices'),
-      soft('/health')
+      soft('/health'),
+      soft('/presence')
     ].concat(SYSTEM_KINDS.map(function (k) {
       return soft('/events?kind=' + k + '&from=' + from + '&to=' + to + '&limit=300');
     }));
 
     Promise.all(jobs).then(function (res) {
       var summary = res[0], analytics = res[1], devices = res[2], health = res[3];
-      var sysLists = res.slice(4);
+      var presence = res[4];
+      var sysLists = res.slice(5);
 
       var sys = [], sysOk = true;
       sysLists.forEach(function (r) {
@@ -317,6 +322,12 @@
 
       if (devices && Array.isArray(devices.devices)) state.devices = devices.devices;
       else if (summary && Array.isArray(summary.devices)) state.devices = summary.devices;
+
+      /* The presence is separate from the record: it says whether the
+       * thing that watches is working, which is a different question
+       * from what it has heard.  A service that does not have the
+       * endpoint yet simply leaves it null. */
+      if (presence && Array.isArray(presence.hubs)) state.presence = presence;
 
       if (analytics) state.analytics = analytics;
 
@@ -483,6 +494,75 @@
     return Math.round(host.clientWidth || host.getBoundingClientRect().width || 0);
   }
 
+  /* A smooth curve through a set of points.
+   *
+   * A straight line between two counts draws a corner at every point,
+   * and a corner in a chart of daily counts says something that is not
+   * there: that the count jumped between two days and then stayed put.
+   * So the line is curved.
+   *
+   * The curve must not overshoot.  A plain Catmull-Rom spline through
+   * these points would dip below the baseline between two quiet days,
+   * and a chart of counts that draws a negative count is lying.  The
+   * tangents are chosen the Fritsch-Carlson way instead: each point's
+   * slope is limited by its neighbours', so the curve turns at a point
+   * and never past it, and it never crosses the line the points sit
+   * on.
+   *
+   * pts is [[x, y], ...] with the x values rising. */
+  function smoothPath(pts) {
+    var n = pts.length;
+    if (n < 2) return '';
+    var slopes = new Array(n - 1);
+    for (var i = 0; i < n - 1; i++) {
+      var dx = pts[i + 1][0] - pts[i][0];
+      slopes[i] = dx === 0 ? 0 : (pts[i + 1][1] - pts[i][1]) / dx;
+    }
+    var m = new Array(n);
+    m[0] = slopes[0];
+    m[n - 1] = slopes[n - 2];
+    for (var j = 1; j < n - 1; j++) {
+      var a = slopes[j - 1], b = slopes[j];
+      if (a * b <= 0) {
+        m[j] = 0;                       /* a peak or a trough: flat here */
+      } else {
+        var mid = (a + b) / 2;
+        var lim = 3 * Math.min(Math.abs(a), Math.abs(b));
+        m[j] = Math.abs(mid) > lim ? (mid < 0 ? -lim : lim) : mid;
+      }
+    }
+    var d = [];
+    for (var k = 0; k < n - 1; k++) {
+      var x0 = pts[k][0], y0 = pts[k][1];
+      var x1 = pts[k + 1][0], y1 = pts[k + 1][1];
+      var h = (x1 - x0) / 3;
+      if (k === 0) {
+        d.push('M' + x0.toFixed(2) + ',' + y0.toFixed(2));
+      }
+      d.push('C' + (x0 + h).toFixed(2) + ',' + (y0 + m[k] * h).toFixed(2) +
+             ' ' + (x1 - h).toFixed(2) + ',' + (y1 - m[k + 1] * h).toFixed(2) +
+             ' ' + x1.toFixed(2) + ',' + y1.toFixed(2));
+    }
+    return d.join(' ');
+  }
+
+  /* A bar with a rounded top and a square foot.
+   *
+   * The foot stands on the axis, so it has to be square: a bar that
+   * lifted off the line would read as floating above it.  The top is
+   * rounded because a hard corner on a wide bar is a slab, and the
+   * curve softens the shape without turning it into a blob. */
+  function barPath(x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h));
+    var f = function (n) { return Number(n).toFixed(2); };
+    return 'M' + f(x) + ',' + f(y + h) +
+           'V' + f(y + r) +
+           'A' + f(r) + ',' + f(r) + ' 0 0 1 ' + f(x + r) + ',' + f(y) +
+           'H' + f(x + w - r) +
+           'A' + f(r) + ',' + f(r) + ' 0 0 1 ' + f(x + w) + ',' + f(y + r) +
+           'V' + f(y + h) + 'Z';
+  }
+
   function registerChart(host, draw) {
     charts.push({ host: host, draw: draw });
   }
@@ -569,10 +649,15 @@
       var bar = null;
       if (val > 0) {
         var bh = Math.max(1.5, plotH * (val / top));
-        bar = svgEl('rect', {
-          x: cx - barW / 2, y: padT + plotH - bh, width: barW, height: bh,
+        /* The top curve scales with the bar: a narrow bar cannot carry
+         * a wide curve, and a tall one can carry more of it. */
+        var r = Math.min(barW * 0.24, 6, bh);
+        bar = svgEl('path', {
+          d: barPath(cx - barW / 2, padT + plotH - bh, barW, bh, r),
           fill: spec.color ? spec.color(i) : v('--series-1'),
-          rx: barW >= 5 ? 2 : 0
+          /* An edge of its own, so a bar standing on a pale grid still
+           * has a boundary the eye can find. */
+          stroke: v('--axis'), 'stroke-width': '1', 'stroke-linejoin': 'round'
         });
         svg.appendChild(bar);
       }
@@ -759,21 +844,22 @@
     var W = 100, H = 34, pad = 3;
     var step = W / (vals.length - 1);
     var pts = vals.map(function (val, i) {
-      return (i * step).toFixed(2) + ',' + (H - pad - (H - pad * 2) * (val / max)).toFixed(2);
+      return [i * step, H - pad - (H - pad * 2) * (val / max)];
     });
+    var line = smoothPath(pts);
     return svgEl('svg', {
       class: 'spark', viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: H,
       preserveAspectRatio: 'none', role: 'img',
       'aria-label': 'Daily cry counts across the range, peaking at ' + max + ' in one day.'
     }, [
       svgEl('title', { text: 'Cries per day across the range' }),
-      svgEl('polygon', {
-        points: '0,' + H + ' ' + pts.join(' ') + ' ' + W + ',' + H,
+      svgEl('path', {
+        d: line + ' L' + W + ',' + H + ' L0,' + H + ' Z',
         fill: v('--seq-100')
       }),
-      svgEl('polyline', {
-        points: pts.join(' '), fill: 'none', stroke: v('--series-1'),
-        'stroke-width': '1.5', 'stroke-linejoin': 'round',
+      svgEl('path', {
+        d: line, fill: 'none', stroke: v('--series-1'),
+        'stroke-width': '1.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
         'vector-effect': 'non-scaling-stroke'
       })
     ]);
@@ -791,11 +877,9 @@
     if (!list.length) { show(el, false); return; }
     var secs = list.reduce(function (a, r) { return a + (Number(r.duration_s) || 0); }, 0);
     text(el, list.length + (list.length === 1 ? ' episode has' : ' episodes have') +
-      ' no known time — the hub had not reached a time server when ' +
-      (list.length === 1 ? 'it' : 'they') + ' happened (' + dur(secs) +
+      ' no known time — the hub had not reached a time server (' + dur(secs) +
       ' of crying). ' + (list.length === 1 ? 'It is' : 'They are') +
-      ' counted in the totals, but ' + (list.length === 1 ? 'it is' : 'they are') +
-      ' not placed on any chart or timeline below, and ' +
+      ' counted in the totals, but not placed on any chart, and ' +
       (list.length === 1 ? 'it appears' : 'they appear') +
       ' as "Time unknown" in the episode list.');
     show(el, true);
@@ -892,7 +976,7 @@
   function systemCard() {
     var card = makeCard({
       title: 'System records', span2: true,
-      sub: 'When the hub was listening, when it stopped, and when it restarted.'
+      sub: 'When the hub was listening, and when it stopped.'
     });
     var rows = state.system.filter(function (e) { return e.start_at; });
     if (!rows.length) {
@@ -913,8 +997,7 @@
       ];
     });
     card.body.appendChild(tableWrap(dataTable(headers, body, 'System records, newest first'), false));
-    card.body.appendChild(note('A deaf spell means that cot was not being watched. ' +
-      'A quiet stretch during one is not evidence of a quiet baby.' +
+    card.body.appendChild(note('A deaf spell means that cot was not being watched.' +
       (rows.length > 200 ? ' Showing the most recent 200 of ' + rows.length + '.' : '')));
     return card.root;
   }
@@ -938,7 +1021,7 @@
     var total = series.reduce(function (a, x) { return a + (x.rec ? x.rec.cries : 0); }, 0);
     var card = makeCard({
       title: 'Cries by day', span2: true,
-      sub: 'Every day in the range, including the quiet ones.'
+      sub: 'Every day in the range.'
     });
     if (!total) {
       card.body.appendChild(miniEmpty('No cry episodes fall in this range yet.'));
@@ -974,7 +1057,7 @@
           fmt: function (x) { return num(x) + ' cries'; }
         });
       });
-    card.body.appendChild(note('Days with no bar had no uploaded cries.'));
+    card.body.appendChild(note('A day with no bar had no uploaded cries.'));
     return card.root;
   }
 
@@ -984,7 +1067,7 @@
     var k = s.kpis || {};
     var card = makeCard({
       title: 'Night by night', span2: true,
-      sub: 'A night is 20:00 to 06:00, named by the evening it starts.'
+      sub: '20:00 to 06:00, named by the evening it starts.'
     });
     if (!total) {
       card.body.appendChild(miniEmpty('No night cries in this range.'));
@@ -1033,7 +1116,7 @@
     var total = hours.reduce(function (a, x) { return a + (x.cries || 0); }, 0);
     var card = makeCard({
       title: 'When in the day',
-      sub: 'Local hour. The shaded hours are night, 20:00–06:00.'
+      sub: 'Local hour. Shaded hours are night.'
     });
     if (!total) {
       card.body.appendChild(miniEmpty('No cry episodes to place on a clock yet.'));
@@ -1081,7 +1164,7 @@
   function weekdayCard(s) {
     var wd = s.per_weekday || [];
     var total = wd.reduce(function (a, x) { return a + (x.cries || 0); }, 0);
-    var card = makeCard({ title: 'Day of the week', sub: 'Which weekdays carry the most crying.' });
+    var card = makeCard({ title: 'Day of the week' });
     if (!total) {
       card.body.appendChild(miniEmpty('No cry episodes to spread across the week yet.'));
       return card.root;
@@ -1115,7 +1198,7 @@
     var list = s.per_cot || [];
     var card = makeCard({
       title: 'By cot', span2: true,
-      sub: 'Each cot keeps its own colour everywhere on this page.'
+      sub: 'Each cot keeps its own colour.'
     });
     if (!list.length) {
       card.body.appendChild(miniEmpty('No cot has a recorded cry in this range.'));
@@ -1152,7 +1235,7 @@
     var all = (s.recent || []).slice().reverse();   /* newest first */
     var card = makeCard({
       title: 'The last episodes', span2: true,
-      sub: 'Newest first. Times are in this device’s own time zone.'
+      sub: 'Newest first.'
     });
     if (!all.length) {
       card.body.appendChild(miniEmpty('No episodes have been uploaded for this range.'));
@@ -1233,7 +1316,7 @@
     var total = hist.reduce(function (x, b) { return x + (b.count || 0); }, 0);
     var card = makeCard({
       title: 'How long the cries last',
-      sub: 'Short settling sounds on the left, long cries on the right.'
+      sub: 'Short on the left, long on the right.'
     });
     if (!total) {
       card.body.appendChild(miniEmpty('No timed episodes to measure yet.'));
@@ -1292,7 +1375,7 @@
     var cots = (a.per_cot || []).slice();
     var card = makeCard({
       title: 'Hour by cot', span2: true,
-      sub: 'Every cell prints its own count, so the colour is never the only signal.'
+      sub: 'Every cell prints its own count.'
     });
     var max = 0;
     cots.forEach(function (c) {
@@ -1427,7 +1510,7 @@
     var list = a.per_cot || [];
     var card = makeCard({
       title: 'Each cot’s pattern', span2: true,
-      sub: 'When each cot is usually heard, and how much of it is at night.'
+      sub: 'When each cot is usually heard.'
     });
     if (!list.length) {
       card.body.appendChild(miniEmpty('No cot has enough records for a pattern yet.'));
@@ -1456,7 +1539,7 @@
     var list = (a.nights || []).slice().reverse();
     var card = makeCard({
       title: 'The nights', span2: true,
-      sub: 'Newest first. Each night is named by the evening it starts.'
+      sub: 'Newest first.'
     });
     if (!list.length) {
       card.body.appendChild(miniEmpty('No night has a recorded cry in this range.'));
@@ -1497,7 +1580,7 @@
     var list = a.insights || [];
     var card = makeCard({
       title: 'What the record says', span2: true,
-      sub: 'Written by the dashboard from the numbers above — nothing is added here.'
+      sub: 'From the numbers above.'
     });
     if (!list.length) {
       card.body.appendChild(miniEmpty('Nothing to report yet.'));
@@ -1555,14 +1638,120 @@
     return (state.summary && state.summary.device) || state.devices[0] || null;
   }
 
+  /* ---------------------------------------------------------------- presence */
+
+  /* Who is here.
+   *
+   * The hub reports in once a minute whether or not there is anything to
+   * record, so this is what answers the question a caregiver opens the
+   * dashboard with after a quiet week: was the baby quiet, or did the
+   * hub stop?  A record cannot answer that -- it only says what was
+   * heard. */
+  function presenceHub() {
+    var p = state.presence;
+    if (!p || !p.hubs || !p.hubs.length) return null;
+    var dev = state.device;
+    if (!dev) {
+      var cur = currentHub();
+      dev = cur && cur.device ? cur.device : null;
+    }
+    if (dev) {
+      for (var i = 0; i < p.hubs.length; i++) {
+        if (p.hubs[i].device === dev) return p.hubs[i];
+      }
+    }
+    return p.hubs[0];
+  }
+
+  function presenceNodes(device) {
+    var p = state.presence;
+    if (!p || !p.nodes) return [];
+    return p.nodes.filter(function (n) {
+      return !device || n.device === device;
+    });
+  }
+
+  function presenceRow(name, word, dotState, detail) {
+    return h('span', { class: 'presence-chip', 'data-state': dotState }, [
+      h('span', { class: 'presence-dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'p-name', text: name }),
+      h('span', { class: 'p-word', text: word }),
+      detail ? h('span', { class: 'p-detail', text: detail }) : null
+    ]);
+  }
+
+  /* Who is here, as a strip under the numbers.
+   *
+   * The hub reports in once a minute whether or not there is anything
+   * to record, so this is what answers the question a caregiver opens
+   * the dashboard with after a quiet week: was the baby quiet, or did
+   * the hub stop?  A record cannot answer that -- it only says what
+   * was heard. */
+  function renderPresence() {
+    var el = ids['presence-strip'];
+    if (!el) return;
+    clear(el);
+    var ph = presenceHub();
+    if (!ph) {
+      show(el, false);
+      return;
+    }
+
+    el.appendChild(h('span', { class: 'strip-label', text: 'Here' }));
+
+    var hubBits = [];
+    if (ph.fw && ph.fw !== 'demo') hubBits.push('firmware ' + ph.fw);
+    if (ph.online) {
+      if (!ph.demo) hubBits.push('reported ' + ago(ph.at));
+    } else {
+      hubBits.push('last report ' + ago(ph.at));
+    }
+    el.appendChild(presenceRow(
+      hubName(ph), ph.online ? 'online' : 'offline',
+      ph.online ? 'on' : 'off', hubBits.join(' · ')));
+
+    presenceNodes(ph.device).forEach(function (n) {
+      var word, dot;
+      if (!n.online) {
+        word = 'offline';
+        dot = 'off';
+      } else if (n.deaf) {
+        word = 'not heard';
+        dot = 'deaf';
+      } else {
+        word = 'online';
+        dot = 'on';
+      }
+      var bits = [];
+      if (n.online && n.rssi) bits.push(n.rssi + ' dBm');
+      if (n.deaf) bits.push('the hub cannot get a window from it');
+      if (!n.online) bits.push('not answering');
+      el.appendChild(presenceRow(cotName(n.cot), word, dot, bits.join(' · ')));
+    });
+
+    show(el, true);
+  }
+
   function renderChrome() {
     var s = state.summary;
     var days = (s && s.range && s.range.days) || state.days;
     var hub = currentHub();
 
     /* hubmeta */
-    var meta;
-    if (!state.devices.length) {
+    var meta, dotState = 'none';
+    var ph = presenceHub();
+    if (ph) {
+      dotState = ph.online ? 'on' : 'off';
+      var bits = [hubName(ph), ph.online ? 'online' : 'offline'];
+      var pnodes = presenceNodes(ph.device);
+      if (pnodes.length) {
+        var up = pnodes.filter(function (n) { return n.online; }).length;
+        bits.push(up === pnodes.length
+          ? pnodes.length + (pnodes.length === 1 ? ' cot online' : ' cots online')
+          : up + ' of ' + pnodes.length + ' cots online');
+      }
+      meta = bits.join(' · ');
+    } else if (!state.devices.length) {
       meta = 'No hub has uploaded to this dashboard yet.';
     } else if (state.devices.length > 1 && !state.device) {
       var newest = state.devices.reduce(function (a, d) {
@@ -1573,7 +1762,8 @@
       meta = hubName(hub) + (hub && hub.fw ? ' · firmware ' + hub.fw : '') +
         ' · last upload ' + ago(hub && hub.last_seen);
     }
-    text(ids.hubmeta, meta);
+    text(ids['hubmeta-text'], meta);
+    ids.hubmeta.setAttribute('data-state', dotState);
     if (hub && hub.device) ids.hubmeta.setAttribute('title', hub.device);
     else ids.hubmeta.removeAttribute('title');
 
@@ -1591,20 +1781,20 @@
 
     /* scope note */
     var parts = [];
-    parts.push('Overview covers the last ' + days + ' days, ' +
-      (state.cot ? cotName(state.cot) + ' only' : 'every cot') + '.');
-    parts.push('A night is 20:00–06:00 and is named by the evening it starts.');
+    parts.push('The last ' + days + ' days, ' +
+      (state.cot ? cotName(state.cot) + ' only' : 'every cot') +
+      '. A night is 20:00–06:00, named by the evening it starts.');
 
     if (state.devices.length > 1) {
-      var line = 'The totals and charts cover every hub — the API does not split them by hub.';
+      var line = 'The totals and charts cover every hub.';
       if (state.counts) {
         var bits = state.devices.map(function (d) {
           return hubName(d) + ' ' + num(state.counts.counts[d.device] || 0);
         });
-        line += ' Timed cry records uploaded in this range: ' + bits.join(', ') +
-          (state.counts.capped ? ' (most recent 2000 records)' : '') + '.';
+        line += ' Timed records in this range: ' + bits.join(', ') +
+          (state.counts.capped ? ' (most recent 2000)' : '') + '.';
       }
-      if (state.device) line += ' "' + hubName(hub) + '" is selected for the hub details above.';
+      if (state.device) line += ' "' + hubName(hub) + '" is selected above.';
       parts.push(line);
     }
 
@@ -1613,8 +1803,7 @@
       parts.push(deaf.map(function (d) {
         return cotName(d.cot) + ' has not been heard since ' + clockAt(d.since) +
           ' (' + ago(d.since) + ')';
-      }).join('; ') + '. A quiet stretch after that does not mean a quiet baby — ' +
-        'that cot was not being watched.');
+      }).join('; ') + ' — that cot was not being watched.');
     }
 
     text(ids['scope-note'], parts.join(' '));
@@ -1669,6 +1858,7 @@
     show(body, true);
     renderKpis(s);
     renderUntimed(s);
+    renderPresence();
     renderSystemStrip();
     renderOverviewGrid(s);
   }
