@@ -24,6 +24,7 @@
 
   var API = '/api/v1';
   var POLL_MS = 30000;
+  var PRESENCE_POLL_MS = 10000;
   var NS = 'http://www.w3.org/2000/svg';
   var NIGHT_START = 20;          // server.py: NIGHT_START_HOUR
   var NIGHT_END = 6;             // server.py: NIGHT_END_HOUR
@@ -253,11 +254,14 @@
     systemOpen: false,
     lastGood: 0,
     failures: 0,
-    busy: false
+    busy: false,
+    busySince: 0,
+    presenceBusy: false
   };
 
   var charts = [];      /* { host, draw } — redrawn on resize and tab change */
   var timer = null;
+  var presenceTimer = null;
   var pristine = {};    /* original empty-state wording, restored after errors */
 
   /* --------------------------------------------------------------- fetch */
@@ -268,13 +272,35 @@
   var TZ = '';
   try { TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* keep '' */ }
 
+  /* A read that never comes back must not freeze the page.  The busy
+   * flag below is only a guard against overlapping reads; if a request
+   * hangs, the flag would stay set for ever and the page would sit on
+   * its last answer -- which is how a hub that has gone offline keeps
+   * reading as online.  So every read is given a deadline, and the
+   * guard has a deadline of its own. */
+  var FETCH_TIMEOUT_MS = 15000;
+  var BUSY_STUCK_MS = 60000;
+
   function getJSON(path) {
     if (TZ) path += (path.indexOf('?') >= 0 ? '&' : '?') + 'tz=' + encodeURIComponent(TZ);
-    return fetch(API + path, { cache: 'no-store', credentials: 'same-origin' })
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = null;
+    if (ctl) timer = setTimeout(function () { ctl.abort(); }, FETCH_TIMEOUT_MS);
+    function done(fn, arg) {
+      if (timer) { clearTimeout(timer); timer = null; }
+      return fn(arg);
+    }
+    return fetch(API + path, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: ctl ? ctl.signal : undefined
+    })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
-      });
+      })
+      .then(function (v) { return done(function () { return v; }); },
+            function (e) { return done(function () { throw e; }); });
   }
 
   /* Never rejects: resolves to null so one bad endpoint cannot blank the page. */
@@ -283,8 +309,14 @@
   }
 
   function refresh() {
-    if (state.busy) return;
+    if (state.busy) {
+      /* A read that has been running for a minute is a read that is
+       * never going to finish; let this one go through. */
+      if (Date.now() - state.busySince < BUSY_STUCK_MS) return;
+      state.busy = false;
+    }
     state.busy = true;
+    state.busySince = Date.now();
     if (state.summary) {
       ids['view-overview'].classList.add('refreshing');
       ids['view-patterns'].classList.add('refreshing');
@@ -327,7 +359,7 @@
        * thing that watches is working, which is a different question
        * from what it has heard.  A service that does not have the
        * endpoint yet simply leaves it null. */
-      if (presence && Array.isArray(presence.hubs)) state.presence = presence;
+      setPresence(presence);
 
       if (analytics) state.analytics = analytics;
 
@@ -386,6 +418,53 @@
   function schedule() {
     if (timer) clearTimeout(timer);
     timer = setTimeout(refresh, POLL_MS);
+  }
+
+  /* The presence has its own, faster clock.
+   *
+   * The page asks the service every thirty seconds for the record, and
+   * that is right: cries do not arrive every second, and the read is
+   * not cheap.  But "is the hub still there" is a different question,
+   * it is the one the owner opens the dashboard to ask, and it is
+   * answered by one small endpoint.  So it is asked on its own, every
+   * ten seconds, without dragging the rest of the page along with it.
+   * The three links in the chain -- the hub speaks every 15 s, the
+   * service calls a hub gone after 45 s, the page asks every 10 s --
+   * add up to about a minute between switching the hub off and the
+   * page saying so. */
+  function refreshPresence() {
+    if (state.presenceBusy) return;
+    state.presenceBusy = true;
+    soft('/presence').then(function (p) {
+      state.presenceBusy = false;
+      if (setPresence(p)) {
+        try {
+          renderChrome();
+          renderPresence();
+        } catch (err) {
+          if (window.console && console.error) console.error(err);
+        }
+      }
+      schedulePresence();
+    });
+  }
+
+  /* Take the newest answer.  The fast poll and the full read both ask
+   * for the presence, and they can arrive out of order; an older
+   * answer must not replace a newer one, or the page would say the hub
+   * is back when it has just gone. */
+  function setPresence(p) {
+    if (!p || !Array.isArray(p.hubs)) return false;
+    if (state.presence && typeof p.now === 'number' &&
+        typeof state.presence.now === 'number' &&
+        p.now < state.presence.now) return false;
+    state.presence = p;
+    return true;
+  }
+
+  function schedulePresence() {
+    if (presenceTimer) clearTimeout(presenceTimer);
+    presenceTimer = setTimeout(refreshPresence, PRESENCE_POLL_MS);
   }
 
   function setConn(kind, msg) {
@@ -1858,7 +1937,6 @@
     show(body, true);
     renderKpis(s);
     renderUntimed(s);
-    renderPresence();
     renderSystemStrip();
     renderOverviewGrid(s);
   }
@@ -1916,6 +1994,10 @@
     charts = [];
     renderControls();
     renderChrome();
+    /* Who is here is drawn from the presence alone, so it is drawn
+     * whatever the record has to show -- including nothing at all,
+     * which is when the caregiver most wants to know. */
+    renderPresence();
     renderOverview();
     renderPatterns();
     drawCharts();
@@ -2027,6 +2109,11 @@
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) return;
+      /* Coming back to the tab is the moment the caregiver most wants
+       * an answer, so the presence is asked for at once -- a browser
+       * may have throttled the timers while the tab was in the
+       * background. */
+      refreshPresence();
       if (Date.now() - state.lastGood > POLL_MS) refresh();
       else drawCharts();
     });
@@ -2040,6 +2127,7 @@
     setTab('overview');
     setConn('loading', 'Connecting');
     refresh();
+    refreshPresence();
   }
 
   if (document.readyState === 'loading') {

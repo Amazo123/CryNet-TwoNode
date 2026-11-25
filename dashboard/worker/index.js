@@ -575,9 +575,14 @@ async function handleUpload(db, request) {
 /* ------------------------------------------------------------- presence */
 
 /* A hub is taken to be there if it has said something in the last three
-   minutes.  The hub says once a minute, so three is three chances missed
-   before the dashboard calls it gone. */
-const PRESENCE_STALE_S = 180;
+   quarters of a minute.  The hub says every fifteen seconds, so three is
+   three chances missed before the dashboard calls it gone -- the same
+   rule of three the offline server keeps, four times faster.  The owner
+   asked for the hub's connection to be checked "as often as possible",
+   and this is the middle link of the three that decide it: how often
+   the hub speaks (15 s), how long this waits (45 s), and how often the
+   page asks (10 s). */
+const PRESENCE_STALE_S = 45;
 
 /* Mirrors server.py's build_presence(): who is here, and which of them
    is still answering.  A record says what happened; this says whether the

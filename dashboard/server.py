@@ -362,12 +362,16 @@ def local_date(ts: int, lt=make_local()) -> str:
 
 
 # A hub is taken to be there if it has said something in the last three
-# minutes.  The hub says once a minute, so three is three chances
-# missed before the dashboard calls it gone -- long enough that one
-# dropped request does not make the caregiver think the hub has died,
-# short enough that a hub that has been switched off is gone before
-# anyone has looked away.
-PRESENCE_STALE_S = 180
+# quarters of a minute.  The hub says every fifteen seconds, so three is
+# three chances missed before the dashboard calls it gone -- long enough
+# that one dropped request does not make the caregiver think the hub has
+# died, short enough that a hub that has been switched off is gone
+# before anyone has looked away.  The owner asked for the connection
+# to be checked "as often as possible"; the answer is the sum of the
+# three links in the chain -- how often the hub speaks (15 s), how long
+# this waits (45 s), and how often the page asks (10 s) -- so each of
+# them was shortened and this one kept its rule of three.
+PRESENCE_STALE_S = 45
 
 
 def build_presence(store: Store) -> dict:

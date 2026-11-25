@@ -76,12 +76,18 @@ static const char *TAG = "crynet";
 #define RECONNECT_EVERY_S 15
 #define WRONG_CHANNEL_RETRY_S 300
 
-/* How often the hub says who is here.  A minute is quick enough that a
- * hub that has just been switched off is gone from the dashboard before
- * the caregiver has looked away, and slow enough that it costs nothing:
- * one small request a minute is 1440 a day against a free tier's
- * hundred thousand. */
-#define PRESENCE_EVERY_S 60
+/* How often the hub says who is here.  The owner asked for the hub's
+ * connection to be checked "as often as possible", because a hub that
+ * had been switched off still read as online for minutes afterwards.
+ * The chain that decides "online" has three links -- how often the hub
+ * speaks, how long the service waits before it calls a hub gone, and
+ * how often the page asks -- and the answer is the sum of them.  This
+ * is the first link, so it is made short: a quarter of a minute.  The
+ * cost is one small request every fifteen seconds, which is 5760 a day
+ * against a free tier's hundred thousand, and a TLS handshake each time
+ * -- a few hundred milliseconds of radio time in a day, on the same
+ * channel the cots use, which the radio time budget can afford. */
+#define PRESENCE_EVERY_S 15
 
 #define BIT_IP    (1u << 0)
 #define BIT_LOST  (1u << 1)
@@ -624,9 +630,11 @@ static void net_task(void *arg)
             continue;   /* clock only; nothing to post to */
         }
 
-        /* The presence goes every minute whatever else is happening.  A
-         * hub that is working but has nothing to say still has to be
-         * able to say that it is there. */
+        /* The presence goes every fifteen seconds whatever else is
+         * happening.  A hub that is working but has nothing to say still
+         * has to be able to say that it is there -- and it has to say
+         * it often enough that a hub which has just been switched off
+         * is gone from the dashboard before anyone goes looking. */
         bool presence_due = false;
         if (s_presence_lock != NULL &&
             xSemaphoreTake(s_presence_lock, pdMS_TO_TICKS(50)) == pdTRUE) {

@@ -71,6 +71,11 @@
 
   <main>
     <section id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="-1">
+      <!-- Who is here.  This strip is deliberately outside #overview-body:
+           the body is hidden when there is nothing to show, and "is the
+           watcher alive" is the question you ask exactly when there is
+           nothing to show. -->
+      <div class="presence-strip" id="presence-strip" hidden></div>
       <div class="empty" id="empty-overview" hidden>
         <svg width="72" height="56" viewBox="0 0 72 56" aria-hidden="true">
           <rect x="8" y="22" width="56" height="24" rx="6" fill="none" class="art-line" stroke-width="2"/>
@@ -84,7 +89,6 @@
       <div id="overview-body" hidden>
         <div class="kpis" id="kpis"></div>
         <p class="card-note" id="untimed-note" hidden></p>
-        <div class="presence-strip" id="presence-strip" hidden></div>
         <div class="system-strip" id="system-strip" hidden></div>
         <div class="grid" id="overview-grid"></div>
       </div>

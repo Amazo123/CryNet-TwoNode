@@ -2,7 +2,7 @@
 # Verify them with: python firmware/tools/flash_unit.py --check
 
 aefe21ad9f40735b7ebc07c2b6ad3eeb440477baed575bfc205f78a043c6282e  hub/bootloader.bin
-f3282201bf0ed5b6e67962b66c3382cee801a3a7d278beca9b5d59f8215303fd  hub/firmware.bin
+1868bbd5ad0732c1b5240e120988735248b0a8616122c26b2cc382b13e4c0e22  hub/firmware.bin
 463793a642ab4a905bd6b4c0b07c749d4ba199ef459b0a91450ca21c0cd581d4  hub/partitions.bin
 32e19c4aa6c614d30d3f1cd90c34040c690d30bc4e7683ac157828258c1c2b24  node/app.bin
 f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0  node/boot_app0.bin
