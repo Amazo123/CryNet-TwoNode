@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>CryNet — Flashing Every Unit, Offline</title>
+<style>
+@page {
+  size: A4; margin: 18mm 16mm 16mm 16mm;
+  @bottom-center { content: counter(page) " / " counter(pages);
+                   font-family: "Segoe UI", Arial, sans-serif; font-size: 8.5pt; color: #7c8a89; }
+}
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { font-family: Georgia, "Times New Roman", serif; font-size: 10.2pt; line-height: 1.5;
+       color: #1b2422; margin: 0; }
+h1 { font-family: "Segoe UI", Arial, sans-serif; font-size: 20pt; color: #0f3b3a;
+     margin: 0 0 12pt 0; padding-bottom: 6pt; border-bottom: 2.5pt solid #2dd4bf;
+     page-break-before: always; page-break-after: avoid; }
+h1.first { page-break-before: avoid; font-size: 28pt; border: none; margin-bottom: 2pt; }
+h2 { font-family: "Segoe UI", Arial, sans-serif; font-size: 13pt; color: #114a48;
+     margin: 16pt 0 6pt 0; page-break-after: avoid; }
+h3 { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.8pt; color: #1d5f5c;
+     margin: 12pt 0 4pt 0; page-break-after: avoid; }
+p { margin: 0 0 7pt 0; }
+code { font-family: Consolas, "Courier New", monospace; font-size: 8.7pt; background: #eef3f2;
+       padding: 0.5pt 2.5pt; border-radius: 2pt; color: #0d3f3d; }
+pre { background: #f4f7f6; border: 0.5pt solid #cfdbd9; border-left: 2.5pt solid #2dd4bf;
+      padding: 6pt 9pt; margin: 0 0 9pt 0; font-family: Consolas, "Courier New", monospace;
+      font-size: 8.2pt; line-height: 1.35; white-space: pre-wrap; overflow-wrap: break-word;
+      page-break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 0 0 10pt 0; font-size: 8.7pt;
+        page-break-inside: avoid; font-family: "Segoe UI", Arial, sans-serif; }
+th { background: #0f3b3a; color: #f2f7f6; text-align: left; padding: 4pt 5pt; font-weight: 600;
+     border: 0.4pt solid #0f3b3a; }
+td { padding: 3.4pt 5pt; border: 0.4pt solid #cfdbd9; vertical-align: top; }
+tbody tr:nth-child(even) { background: #f3f7f6; }
+ul, ol { margin: 0 0 8pt 0; padding-left: 16pt; }
+li { margin: 0 0 3pt 0; }
+.rules { background: #f2f8f7; border: 1pt solid #2dd4bf; border-radius: 3pt;
+         padding: 8pt 12pt; margin: 0 0 12pt 0; page-break-inside: avoid; }
+.rules h2 { margin-top: 2pt; }
+.warn { background: #fdf3f0; border-left: 2.5pt solid #d97706; padding: 6pt 10pt;
+        margin: 0 0 10pt 0; font-size: 9.6pt; page-break-inside: avoid; }
+.ok { color: #0f6f6b; font-weight: 600; }
+.sub { font-family: "Segoe UI", Arial, sans-serif; font-size: 12pt; color: #2b7a77; margin: 2pt 0 10pt 0; }
+.meta { font-family: "Segoe UI", Arial, sans-serif; font-size: 9.2pt; color: #4a5c5a; }
+.small { font-size: 8.6pt; color: #4a5c5a; }
+.card pre { border-left: none; background: #fbfdfd; font-size: 7.6pt; }
+.step { font-family: "Segoe UI", Arial, sans-serif; color: #0f6f6b; font-weight: 600; }
+</style></head><body>
+
+<h1 class="first">CryNet</h1>
+<p class="sub">Flashing every unit, offline — the complete step-by-step guide</p>
+<p class="lede" style="font-size:10.4pt; color:#33423f">This document is written so you can put the current
+firmware on the hub, both cot nodes and the wearable — or on brand-new boards — by yourself, at home,
+with no compiler, no IDE, no internet and nobody to ask. One command per unit. Everything the commands
+print, what it should look like when it worked, and what to do when it did not, is in here.</p>
+
+<table class="meta">
+<tr><td style="width:30%"><strong>Applies to</strong></td><td>The two-cot system: ESP32-S3 hub, 2 &times; ESP32-C3 cot nodes, ESP32-C3 wearable</td></tr>
+<tr><td><strong>Repository</strong></td><td><code>C:\Users\HP\.t3\projects\fp-two-node</code> &mdash; a copy on a USB stick works too</td></tr>
+<tr><td><strong>Images</strong></td><td><code>firmware/prebuilt/</code> &mdash; already built, already committed</td></tr>
+<tr><td><strong>Written</strong></td><td>2026-11-25, against the images of that day (see &sect;2 for their hashes)</td></tr>
+</table>
+
+<div class="rules">
+<h2>The five rules, before anything else</h2>
+<ol>
+<li><strong>A COM port number is not an identity.</strong> Windows renumbers ports when you replug.
+The <strong>MAC address</strong> burned into the chip is the identity. Check &sect;3 every session.</li>
+<li><strong>Flash the hub first.</strong> A new hub reads both old and new node telemetry; an old hub
+misreads the new nodes. Hub, then nodes, then wearable &mdash; never another order.</li>
+<li><strong>Run <code>--check</code> before the first flash of the day.</strong>
+A <span style="color:#b91c1c;font-weight:600">HASH MISMATCH</span> means the image is damaged &mdash; stop.</li>
+<li><strong>The flash never writes NVS.</strong> A node keeps its id; the hub keeps its network and
+token settings. You set those once, and reflashing never erases them.</li>
+<li><strong>Back up before you flash</strong> (&sect;4). Two minutes per board, and it is the only way back.</li>
+</ol>
+</div>
+
+<h1>0 &mdash; One-time setup: the one tool and the folder</h1>
+
+<p>The whole offline path needs exactly one program: <strong>esptool</strong>, which writes firmware
+to a board over USB. It compiles nothing, so it needs no Arduino core, no PlatformIO, no compiler
+and no network. On this machine it is already installed:</p>
+
+<pre>%USERPROFILE%\.platformio\packages\tool-esptool\esptool.exe</pre>
+
+<p>The helper scripts are Python and additionally want <strong>pyserial</strong>
+(<code>pip install pyserial</code>). Both are one-time installs. On a brand-new machine, copy
+<code>tool-esptool\</code> across on a USB stick, or <code>pip install esptool</code> once while
+you do have internet &mdash; after that, everything below works fully offline.</p>
+
+<p>The firmware images live in the repository, already built:</p>
+
+<pre>firmware/prebuilt/
+├── SHA256SUMS         the hash of every image — proof it is intact
+├── BUILD_INFO.json    which source each image was built from
+├── hub/               bootloader.bin  partitions.bin  firmware.bin
+├── node/              bootloader.bin  partitions.bin  boot_app0.bin  app.bin
+└── wearable/          bootloader.bin  partitions.bin  boot_app0.bin  app.bin</pre>
+
+<p class="small">No network? Copy the whole <code>fp-two-node</code> folder onto a USB stick and work
+from the copy. Everything in this guide runs from it unchanged.</p>
+
+<h1>1 &mdash; Step 1: prove the images are intact</h1>
+
+<p><span class="step">Do this once, before touching any board.</span></p>
+
+<pre>python firmware/tools/flash_unit.py --check</pre>
+
+<p>It reads only; it flashes nothing. On 2026-11-25 it printed exactly this:</p>
+
+<pre>== toolchain ==
+  esptool     OK   C:\Users\HP\.platformio\packages\tool-esptool\esptool.exe
+  pyserial    OK
+
+== prebuilt images ==
+  hub:
+    0x000000  bootloader.bin       22560 B  aefe21ad9f40735b...  hash OK
+    0x008000  partitions.bin        3072 B  463793a642ab4a90...  hash OK
+    0x010000  firmware.bin       1620272 B  3c10f0757e31a83f...  hash OK
+  node:
+    0x000000  bootloader.bin       19536 B  9b2fa5e4af7cf282...  hash OK
+    0x008000  partitions.bin        3072 B  148b959cbff1c38a...  hash OK
+    0x00e000  boot_app0.bin         8192 B  f94c5d786a7a8fab...  hash OK
+    0x010000  app.bin             983328 B  32e19c4aa6c614d3...  hash OK
+  wearable:
+    0x000000  bootloader.bin       19536 B  9b2fa5e4af7cf282...  hash OK
+    0x008000  partitions.bin        3072 B  148b959cbff1c38a...  hash OK
+    0x00e000  boot_app0.bin         8192 B  f94c5d786a7a8fab...  hash OK
+    0x010000  app.bin             685744 B  bfcf933820848230...  hash OK</pre>
+
+<div class="warn"><strong>If any line says HASH MISMATCH, stop.</strong> The image is damaged — a
+truncated copy, a disk problem. Re-copy the folder and run <code>--check</code> again. Never flash an
+image that fails this check.</div>
+
+<h1>2 &mdash; Step 2: learn which board is on which port</h1>
+
+<p><span class="step">Do this every session, before the first flash.</span> Windows assigns COM
+numbers from the socket and the plug order, so the same board gets a different number when you move
+it. The port is <em>never guessed</em>: a flash aimed at the wrong port once parked a node in its
+bootloader (incident I-40), which is why the scripts make you name it.</p>
+
+<h2>2a. List what is plugged in</h2>
+
+<pre>python firmware/tools/flash_unit.py --list</pre>
+
+<p>Read it like this:</p>
+
+<table>
+<tr><th>What Windows shows</th><th>What it is</th></tr>
+<tr><td><code>USB-Enhanced-SERIAL CH343 (COMxx)</code></td><td>the <strong>hub</strong> — it has a CH343 USB-serial bridge</td></tr>
+<tr><td><code>USB Serial Device (COMxx)</code></td><td>an ESP32-C3 on its own native USB — a cot node <em>or</em> the wearable; you cannot tell them apart from this line alone</td></tr>
+</table>
+
+<h2>2b. Ask each board who it is</h2>
+
+<pre>python firmware/tools/who_is_who.py COM30 COM31 COM32 COM37</pre>
+
+<p>This resets each board, reads its boot banner, and flashes nothing. A cot node answers with its
+id and its MAC:</p>
+
+<pre>CryNet node firmware — Stage 2b
+node id 2 (saved; the MAC would have said 7)
+node 2  mac 90:DA:72:87:CB:98</pre>
+
+<p>The wearable answers with its OLED and Bluetooth lines:</p>
+
+<pre>[oled] up
+[ble] hub connected
+[ble] state: 2 cot(s), mask 0x00</pre>
+
+<h2>2c. The bench map, the last time it was written down</h2>
+
+<p><strong>Treat this as a memory aid, not as an answer.</strong> Verify with 2a and 2b every time.</p>
+
+<table>
+<tr><th>Board</th><th>MAC (never changes)</th><th>Port that day</th></tr>
+<tr><td><strong>Hub</strong> (ESP32-S3 DevKitC)</td><td>&mdash;</td><td>COM32 (the CH343 gives it away)</td></tr>
+<tr><td><strong>Cot node 1</strong></td><td><code>90:DA:72:85:C5:44</code></td><td>COM31</td></tr>
+<tr><td><strong>Cot node 2</strong></td><td><code>90:DA:72:87:CB:98</code></td><td>COM37</td></tr>
+<tr><td><strong>Wearable</strong></td><td>&mdash;</td><td>COM30</td></tr>
+</table>
+
+<h2>2d. A board that has never been flashed</h2>
+
+<p>A new board prints no CryNet banner, so read its MAC straight from the chip:</p>
+
+<pre>&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32c3 --port COM31 chip-id</pre>
+
+<p>That prints the MAC and proves the board answers on that port at all. Write it next to the board.</p>
+
+<h1>3 &mdash; Step 3: back the board up first</h1>
+
+<p><span class="step">Before every flash.</span> Two minutes, and it is the only way back.</p>
+
+<pre>python firmware/tools/flash_unit.py --role node --port COM31 --backup</pre>
+
+<p><code>--backup</code> reads the board's <em>entire</em> flash to a file in <code>%TEMP%</code>,
+then proceeds only when you run the flash command again. By hand, the same thing:</p>
+
+<pre># a cot node or the wearable (ESP32-C3, 4 MB flash)
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+    --chip esp32c3 --port COM31 read-flash 0x0 0x400000 "$env:TEMP\fullflash_31.bin"
+
+# the hub (ESP32-S3, 16 MB flash) — bigger, so it takes longer
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+    --chip esp32s3 --port COM32 read-flash 0x0 0x1000000 "$env:TEMP\fullflash_hub_32.bin"</pre>
+
+<div class="warn"><strong>Copy the backup out of <code>%TEMP%</code></strong> into a folder you keep
+(keep it named for the board and the date — <code>node1_2026-11-25.bin</code>). Windows clears
+<code>%TEMP%</code> on its own schedule, and a backup that disappears with it was never a backup.
+Rollback is one command; see &sect;8.</div>
+
+<h1>4 &mdash; Step 4: flash — hub first, then the nodes, then the wearable</h1>
+
+<p><strong>The order is not a preference.</strong> The current node sends a 32-byte telemetry frame;
+the pre-D-83 node sent 34 bytes with a battery field in the middle. The current hub reads
+<em>both</em>, so a not-yet-reflashed node cannot confuse it — but an old hub can only read the old
+34 bytes. Flash the hub first, and a node never meets a hub that misreads it.</p>
+
+<p>One command per unit, with its own port named — the port you verified in &sect;2:</p>
+
+<pre><span class="step">the hub, always first:</span>
+python firmware/tools/flash_unit.py --role hub     --port COM32 --log 25
+
+<span class="step">cot node 1:</span>
+python firmware/tools/flash_unit.py --role node    --port COM31 --log 15
+
+<span class="step">cot node 2:</span>
+python firmware/tools/flash_unit.py --role node    --port COM37 --log 15
+
+<span class="step">the wearable:</span>
+python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15</pre>
+
+<p><code>--log N</code> reads the board's boot log for N seconds after the flash, which is how you
+see the &sect;5 lines without opening a second tool. Drop it if you do not want it.</p>
+
+<h2>What the tool actually does, and what it deliberately does not</h2>
+
+<ul>
+<li>Each command writes the images <strong>region by region</strong>, exactly where the partition
+table says: bootloader to <code>0x0</code>, partition table to <code>0x8000</code>, application to
+<code>0x10000</code> (and <code>boot_app0.bin</code> to <code>0xe000</code> on the C3 boards).</li>
+<li><strong>NVS is never written</strong> — it sits at <code>0x9000</code>&ndash;<code>0xE000</code>
+on the nodes and <code>0x9000</code>&ndash;<code>0xF000</code> on the hub, and no command touches it.
+So a node keeps its id and the hub keeps its network settings across every reflash.</li>
+<li>The hub is written as <strong>three images, not one combined file</strong>. A combined image must
+be written in DIO mode; the ROM on this board cannot read the flash in QIO before the bootloader has
+set up its own timing, and a QIO image makes the chip watchdog-reset in a loop. The three-image
+write is the safe one, and the shipped hub images are already DIO.</li>
+</ul>
+
+<h2>The same thing by hand (no Python needed)</h2>
+
+<pre># the hub
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+    --chip esp32s3 --port COM32 --baud 921600 write-flash `
+    0x0     firmware\prebuilt\hub\bootloader.bin `
+    0x8000  firmware\prebuilt\hub\partitions.bin `
+    0x10000 firmware\prebuilt\hub\firmware.bin
+
+# a cot node or the wearable — same command, different folder: node\ or wearable\
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" `
+    --chip esp32c3 --port COM31 --baud 921600 write-flash `
+    0x0     firmware\prebuilt\node\bootloader.bin `
+    0x8000  firmware\prebuilt\node\partitions.bin `
+    0xe000  firmware\prebuilt\node\boot_app0.bin `
+    0x10000 firmware\prebuilt\node\app.bin</pre>
+
+<h1>5 &mdash; Step 5: read the boot log — what <em>good</em> looks like</h1>
+
+<h2>The hub</h2>
+
+<p>A good hub boot says, in this order (real lines from the current build):</p>
+
+<pre>I (864)  app_init: App version:      3acaf99          &larr; the commit it was built from
+I (976)  crynet: CryNet hub — inference core (Stage 2a)
+I (3502) crynet: RESULT: PASS — 4 probes, front end and model agree with the host
+I (4259) ili9341: the panel is up: 320 x 240, rotation 2 (madctl 0x80)
+I (3817) crylog: storage mounted: 4267 of 5775761 bytes used
+I (3837) crylog: boot 104: 104 records kept, 1 still to send, next number 105
+I (4074) crynet: hub-f9172f80 ready: network "Amazyn", dashboard https://…/api/v1/events
+I (4368) link: node 1 is online
+I (4368) link: node 2 is online</pre>
+
+<p>Three things carry the whole verdict:</p>
+
+<ul>
+<li><strong><code>RESULT: PASS — 4 probes</code></strong> — the hub's self-check agrees with the host
+about the model's arithmetic. If it says <code>FAIL</code>, stop and read the lines above it.</li>
+<li><strong>The App version line names a commit.</strong> The banner is the identity check (D-106):
+if the version it prints is older than the images you just wrote, something flashed the wrong file.</li>
+<li><strong><code>node 1 is online</code> / <code>node 2 is online</code></strong>, and the
+<code>link:</code> lines carry <strong>no <code>bat</code> field</strong> — its absence is how you
+know this build is running.</li>
+</ul>
+
+<p><code>crylog:</code> and <code>crynet:</code> lines say the record and the network stage came up.
+If instead you see <em>&ldquo;the cry log could not be opened&rdquo;</em>, the hub carries on and still
+buzzes the wrist — it just keeps no record. If you see <em>&ldquo;dashboard (not set -- log
+only)&rdquo;</em>, the record works; only the uploading is not configured yet (&sect;7).</p>
+
+<h2>A cot node</h2>
+
+<pre>node id 2 (saved; the MAC would have said 7)
+node 2  mac 90:DA:72:87:CB:98
+rms 0.0120  floor 0.0028  level 0.0083</pre>
+
+<p><code>node id <em>n</em> (saved)</code> means the id you set is in NVS and survived the reflash —
+that is exactly right. <code>node id <em>n</em> (derived from the MAC)</code> on a board you have
+already named is a sign you are talking to a different board. With no microphone attached,
+<code>rms 0.0000</code> is correct, not a fault: there is nothing on the data line to be anything
+but zero.</p>
+
+<h2>The wearable</h2>
+
+<pre>[oled] up                       &larr; or: [oled] SSD1306 not found at 0x3C — check SDA 5 / SCL 6
+[ble] hub found (30:30:F9:17:2F:80)
+[ble] hub connected
+[ble] state: 2 cot(s), mask 0x00</pre>
+
+<p><code>2 cot(s)</code> is the hub telling it how many cots it hears; <code>mask 0x00</code> means
+no cot is crying right now. The OLED line without a display attached still means the wearable works —
+the screen is optional to its job; the buzz is not.</p>
+
+<h1>6 &mdash; Step 6: a brand-new node needs its id set</h1>
+
+<p>A new node has no id in NVS, so it derives one from its MAC — <strong>the last byte, masked and
+plus one, so anything from 1 to 16</strong>. The hub watches cots 1 and 2 only, and two identical
+boards can derive the <em>same</em> number. <strong>Set the ids by hand; do not trust the derived
+value.</strong></p>
+
+<p>Open the node's serial console at <strong>115200 baud</strong> (the same port as the flash; any
+serial terminal works) and type:</p>
+
+<pre>id 1        &larr; the first cot
+id 2        &larr; the second cot</pre>
+
+<p>Each answers with the id saved into NVS. It survives every future reflash. The wearable and the
+hub need nothing like this: the wearable finds the hub by Bluetooth; the hub comes up, self-checks
+and starts listening.</p>
+
+<h1>7 &mdash; Step 7: the hub's record and the dashboard, set once</h1>
+
+<p>After a hub flash, three things to know. All of them are stored in NVS: <strong>type them once,
+never again</strong> — reflashing never erases them.</p>
+
+<h2>7a. Prove the record keeps every cry</h2>
+
+<p>Type <code>logtest</code> on the hub's serial console:</p>
+
+<pre>logtest: PASS -- a cry that finishes out of order is still sent</pre>
+
+<p>It runs the out-of-order-cry scenario against the real log component, on its own scratch file;
+your real records are not touched. If it ever says <code>FAIL</code>, do not trust the dashboard's
+record until it is looked at.</p>
+
+<h2>7b. The one router setting that is not optional</h2>
+
+<p><strong>Set the router's 2.4 GHz channel to 6.</strong> The cots talk to the hub on channel 6 and
+the hub has one radio; on any other channel it deliberately drops the Wi-Fi so the cots stay audible.
+A hub on the wrong channel looks like "no network" forever, no matter what you type.</p>
+
+<h2>7c. Tell the hub where the dashboard is</h2>
+
+<pre>net ssid Amazyn me_mine_me                          &larr; which Wi-Fi to join (once)
+net set http://192.168.1.50:8787/api/v1/events      &larr; where records go (once)
+net token &lt;the-token&gt;                               &larr; only for the hosted dashboard (once)
+upload                                              &larr; send what is waiting, now
+net                                                 &larr; check: batches, failures, last error</pre>
+
+<p>The hosted copy needs the router's channel 6 too, and its address is
+<code>https://amazings-crynet.amazingadelowo.workers.dev/api/v1/events</code>. The offline copy needs
+only <code>python dashboard/server.py</code> on any machine on the same network — it prints the exact
+<code>net set</code> line to type.</p>
+
+<div class="warn"><strong>Verify the monitor does not need any of this:</strong> turn the router off,
+raise a test alert with <code>alert 1</code> on the hub's console, and confirm the wrist still buzzes.
+Then <code>log</code> should show the record waiting. The system detects, alerts and records with no
+network at all; the dashboard empties it when one appears.</div>
+
+<h1>8 &mdash; Step 8: when something goes wrong</h1>
+
+<h2>The board sits there and prints nothing — it is in the bootloader</h2>
+
+<p><strong>The most common failure.</strong> A flash that stops partway — wrong chip, wrong port, a
+yanked cable — leaves the board in its bootloader, not running firmware. It looks dead. Bring it
+back:</p>
+
+<pre>&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32c3 --port COM31 run   &larr; node / wearable
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32s3 --port COM32 run   &larr; hub</pre>
+
+<h2><code>could not open port 'COMxx'</code></h2>
+
+<p>The port does not exist — the board is unplugged, or <strong>Windows renumbered it</strong>.
+Go back to &sect;2 and re-identify. Do not guess.</p>
+
+<h2><code>Failed to connect to ESP32: Timed out waiting for packet header</code></h2>
+
+<p>Either the board is in the bootloader (above), or the wrong board is on that port. Settle it:</p>
+
+<pre>&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32c3 --port COM31 chip-id</pre>
+
+<h2>The flash wrote, but the board still behaves oddly</h2>
+
+<p>Read what is actually on it and compare with the shipped image:</p>
+
+<pre>&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32c3 --port COM31 read-flash 0x10000 0x80000 "$env:TEMP\node_app.bin"</pre>
+
+<h2>Roll back to what was there before</h2>
+
+<p>This is what &sect;3's backup was for — write the whole saved flash back at <code>0x0</code>:</p>
+
+<pre>&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32c3 --port COM31 write-flash 0x0 "C:\backups\node1_2026-11-25.bin"
+&amp; "$env:USERPROFILE\.platformio\packages\tool-esptool\esptool.exe" --chip esp32s3 --port COM32 write-flash 0x0 "C:\backups\hub_2026-11-25.bin"</pre>
+
+<h2>The hub shows a cot as offline after a flash</h2>
+
+<p>The hub's log names where a burst went:</p>
+
+<pre>link: node 1: its radio handed over 288 frames since the burst began, 288 of them left it, 0 were refused</pre>
+
+<p><em>handed over == left it</em> with fragments missing means the frames were lost in the air —
+range or interference, not firmware. <em>refused</em> non-zero means the radio queue is too small,
+which the shipped build sizes correctly — so if you see it, you are not running the shipped image.</p>
+
+<h2>The panel is dark</h2>
+
+<p>The hub says <em>&ldquo;the display could not be started&rdquo;</em> when the TFT is absent, and
+that is fine — the monitoring continues. A <em>present</em> TFT that stays dark is wiring:
+CS 10, MOSI 11, SCK 12, DC 13, RST 14, backlight 4, 3V3, GND. Never wire GPIO35&ndash;37 —
+they are the PSRAM bus.</p>
+
+<h1>The whole job, in five commands</h1>
+
+<pre>python firmware/tools/flash_unit.py --check                                    # once, before anything
+python firmware/tools/flash_unit.py --role hub     --port COM32 --log 25       # the hub, first
+python firmware/tools/flash_unit.py --role node    --port COM31 --log 15       # cot node 1
+python firmware/tools/flash_unit.py --role node    --port COM37 --log 15       # cot node 2
+python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15      # the wearable</pre>
+
+<p class="small">— with every port <strong>verified by &sect;2 first</strong>, and a backup from
+&sect;3 on disk before the first <code>--role</code> of the day.</p>
+
+<h1>The bench card — print this page</h1>
+
+<div class="card">
+<pre>CRYNET OFFLINE FLASH — BENCH CARD                        (details: see the section in brackets)
+
+1. WHAT IS PLUGGED IN                                            [&sect;2]
+   python firmware/tools/flash_unit.py --list
+   python firmware/tools/who_is_who.py COM30 COM31 COM32 COM37
+   -&gt; a MAC, not a COM number, is the identity of a board
+      hub = the CH343 line    node 1 = 90:DA:72:85:C5:44    node 2 = 90:DA:72:87:CB:98
+
+2. IS THE TOOLCHAIN GOOD                                         [&sect;1]
+   python firmware/tools/flash_unit.py --check
+   -&gt; every line must end "hash OK";  HASH MISMATCH = do not flash
+
+3. BACK UP BEFORE YOU FLASH                                      [&sect;3]
+   python firmware/tools/flash_unit.py --role node --port COM31 --backup
+   -&gt; copy the .bin OUT of %TEMP% into a folder you keep
+
+4. FLASH — HUB FIRST, THEN NODES, THEN WEARABLE                   [&sect;4]
+   python firmware/tools/flash_unit.py --role hub     --port COM32 --log 25
+   python firmware/tools/flash_unit.py --role node    --port COM31 --log 15
+   python firmware/tools/flash_unit.py --role node    --port COM37 --log 15
+   python firmware/tools/flash_unit.py --role wearable --port COM30 --log 15
+   -&gt; the order matters: an old hub misreads the new nodes' telemetry
+
+5. CHECK THE LOG                                                 [&sect;5]
+   hub      : "RESULT: PASS — 4 probes", "node 1 is online", "node 2 is online",
+              App version names a commit, crylog "storage mounted", no "bat" field
+   node     : "node 1  mac 90:DA:72:85:C5:44"  (id 1) / mac 90:DA:72:87:CB:98 (id 2)
+   wearable : "[ble] state: 2 cot(s), mask 0x00"
+
+6. A NEW NODE NEEDS ITS ID (serial console, 115200 baud)          [&sect;6]
+   id 1        (first cot)          id 2        (second cot)
+   -&gt; the hub watches cots 1 and 2 only; a MAC-derived id is usually neither
+
+7. NOTHING COMES UP?  IT IS IN THE BOOTLOADER                     [&sect;8]
+   esptool --chip esp32c3 --port COM31 run
+
+8. ROLL BACK                                                      [&sect;3, &sect;8]
+   esptool --chip esp32c3 --port COM31 write-flash 0x0 node1_backup.bin
+
+9. ONCE, FOR THE DASHBOARD (hub only, survives reflashes)         [&sect;7]
+   router 2.4 GHz channel = 6   |   logtest = PASS   |   net set &lt;url&gt;   upload</pre>
+</div>
+
+<p class="small" style="margin-top:10pt">Built from <code>FLASHING.md</code> (the reference) and
+<code>GETTING_STARTED_FLASHING.md</code> (the walkthrough) in the repository, which carry the fuller
+versions of everything here — including flashing from the Arduino IDE or PlatformIO, which this
+offline path does not need. If a future build changes the firmware, the images in
+<code>firmware/prebuilt/</code> are rebuilt with it and <code>--check</code> refuses an image whose
+hash no longer matches — so this guide does not go stale silently.</p>
+
+</body></html>
