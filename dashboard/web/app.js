@@ -1578,7 +1578,12 @@
       }
     });
 
-    for (var hh2 = 0; hh2 < 24; hh2 += 3) {
+    /* On a phone the whole heatmap is ~340 px wide, which puts each
+     * hour column under 12 px -- a "00:00" label is wider than three
+     * of them together.  The tick step follows the cell width, the way
+     * the bar charts' tickEvery already does. */
+    var tickStep = cellW >= 15 ? 3 : (cellW >= 9 ? 6 : 12);
+    for (var hh2 = 0; hh2 < 24; hh2 += tickStep) {
       svg.appendChild(svgEl('text', {
         x: padL + cellW * hh2 + cellW / 2, y: H - 6, 'text-anchor': 'middle',
         'font-size': '10.5', fill: v('--text-muted'), text: hourLabel(hh2)

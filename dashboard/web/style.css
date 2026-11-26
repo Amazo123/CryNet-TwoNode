@@ -223,7 +223,12 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 4px 11px 4px 9px;
-  white-space: nowrap;
+  /* No white-space rule on purpose: on a phone the pill can be asked to
+   * hold "Offline · retrying (last read 10:32)" in well under 300 px,
+   * and a pill that cannot wrap is a pill that pushes the whole page
+   * sideways.  An inline-flex box still sits on one line whenever the
+   * line is wide enough; it only wraps under pressure. */
+  min-width: 0;
 }
 
 .conn .dot {
@@ -456,8 +461,16 @@ a:focus-visible,
   padding: 3px 10px 3px 8px;
   background: var(--plane);
   color: var(--text-primary);
-  white-space: nowrap;
+  /* Wraps under pressure, like every chip here: a chip pinned to one
+   * line ("Cot 2 not being heard since 03:12 · 5 h ago") is wider than
+   * a phone and drags the page wide with it.  The break lands between
+   * the label and its "when", never inside a word. */
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  min-width: 0;
 }
+
+.health-chip > span { white-space: nowrap; }
 
 .health-chip .icon {
   width: 14px;
@@ -579,7 +592,16 @@ a:focus-visible,
   padding: 3px 10px 3px 8px;
   background: var(--plane);
   color: var(--text-primary);
-  white-space: nowrap;
+  /* This was the chip that broke the phone: "Nursery hub · offline ·
+   * firmware 2.0-dashboard · last report 1 day ago" pinned on one line
+   * is ~470 px, and `white-space: nowrap` held it there -- the pill ran
+   * off the right edge and the whole page gained a sideways scroll.
+   * The chip now wraps BETWEEN its parts -- dot, name, word, detail --
+   * so the name is never broken mid-word; when the line is narrow the
+   * detail simply drops to a second row inside the pill. */
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
 .presence-chip .presence-dot {
@@ -596,7 +618,14 @@ a:focus-visible,
 .presence-chip[data-state="deaf"] .presence-dot { background: var(--warning); }
 
 .presence-chip .p-word { color: var(--text-secondary); }
-.presence-chip .p-detail { color: var(--text-muted); font-size: 12px; }
+.presence-chip .p-detail { color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+
+/* The chip wraps between its parts, so the name and the state word hold
+ * themselves on one line; the detail, which can be the longest part,
+ * keeps its own words intact and only breaks if it cannot fit a whole
+ * row of the pill to itself. */
+.presence-chip .p-name,
+.presence-chip .p-word { white-space: nowrap; }
 
 .legend {
   display: flex;
@@ -630,7 +659,7 @@ a:focus-visible,
 
 /* ---------------------------------------------------------------- tables */
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 table.data {
   border-collapse: collapse;
