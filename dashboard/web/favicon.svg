@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Amazing's CryNet: an A held inside a C.
+       The C is a listening arc, the way the hub stands watch: open at the
+       right, closed where it matters. The A is the record's own letter.
+       The dot in the A's counter is the cot, the same dot that was the
+       page's brand mark before the mark earned its letters.
+       The teal is the hub panel's own accent (hub_display.c): deeper
+       (#0d9488) for light surroundings, the glass accent (#2dd4bf) for
+       dark ones; the tab strip decides which applies. -->
+  <style>
+    .ring, .peak {
+      fill: none;
+      stroke: #0d9488;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .dot { fill: #0d9488; }
+    @media (prefers-color-scheme: dark) {
+      .ring, .peak { stroke: #2dd4bf; }
+      .dot { fill: #2dd4bf; }
+    }
+  </style>
+  <path class="ring" d="M 24.1 6.58 A 11.5 11.5 0 1 0 24.1 25.42"/>
+  <path class="peak" d="M 17.5 9 L 11.9 22 M 17.5 9 L 23.1 22"/>
+  <circle class="dot" cx="17.5" cy="19" r="2.2"/>
+</svg>

@@ -852,6 +852,8 @@ class Handler(BaseHTTPRequestHandler):
                                    "application/javascript; charset=utf-8")
         if path == "/style.css":
             return self._send_file(WEB / "style.css", "text/css; charset=utf-8")
+        if path == "/favicon.svg":
+            return self._send_file(WEB / "favicon.svg", "image/svg+xml")
 
         if path == "/api/v1/health":
             return self._send_json({

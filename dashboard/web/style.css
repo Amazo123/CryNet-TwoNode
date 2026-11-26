@@ -174,14 +174,31 @@ html, body {
   letter-spacing: -0.01em;
 }
 
-.brand .mark {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  align-self: center;
+/* The mark: an A held inside a C.  The C is a listening arc -- the way
+ * the hub stands watch, open at the right, closed where it matters --
+ * the A is Amazing's own letter, and the dot in the A's counter is the
+ * cot it watches.  The dot was the page's brand mark on its own until
+ * the mark earned its letters; it keeps its place.  The strokes carry
+ * var(--accent), so the mark follows the theme like the rest of the
+ * chrome.  The standalone copy that lives in the favicon.svg file says
+ * the same thing in its own colours. */
+.brand-logo {
+  width: 21px;
+  height: 21px;
   flex: none;
+  align-self: center;
 }
+
+.brand-logo .logo-ring,
+.brand-logo .logo-peak {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-logo .logo-dot { fill: var(--accent); }
 
 .brand .sub {
   font-size: 14px;
