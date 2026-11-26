@@ -1758,7 +1758,14 @@
   }
 
   function presenceRow(name, word, dotState, detail) {
-    return h('span', { class: 'presence-chip', 'data-state': dotState }, [
+    /* A detail long enough that it cannot share the pill's first row
+     * ("firmware 2.0-dashboard · last report 1 day ago") is marked as
+     * such, and the style gives it a row of its own on a phone -- that
+     * is also what lets the pill hug its wrapped content instead of
+     * stretching across the whole strip. */
+    var cls = 'presence-chip';
+    if (detail && detail.length > 24) cls += ' long';
+    return h('span', { class: cls, 'data-state': dotState }, [
       h('span', { class: 'presence-dot', 'aria-hidden': 'true' }),
       h('span', { class: 'p-name', text: name }),
       h('span', { class: 'p-word', text: word }),

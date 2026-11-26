@@ -864,6 +864,24 @@ table.data td .sub { display: block; font-size: 11.5px; color: var(--text-second
   .hubmeta { flex-basis: 100%; order: 3; }
   .controls { gap: 8px 10px; }
   .card { padding: 13px 13px 14px; }
+
+  /* A chip carrying a long firmware line leaves the strip's flex row
+   * for the inline flow: as a flex item its width was measured from the
+   * one-line content (a wrapping flex container's intrinsic width is
+   * the sum of its parts), so the pill stretched across the strip
+   * however the text wrapped inside it.  As an inline-block the pill's
+   * width is the widest of its stacked lines -- about 260 px -- and it
+   * finally hugs.  The flex gaps go with the flex row, so the spans
+   * carry margins, and the detail indents to line up under the name
+   * (the dot is 8 px, the gap 7 px). */
+  .presence-strip { display: block; }
+  .presence-strip .strip-label { margin-right: 8px; }
+  .presence-chip { margin: 0 8px 6px 0; vertical-align: top; }
+  .presence-chip .presence-dot { display: inline-block; }
+  .presence-chip.long { display: inline-block; }
+  .presence-chip.long > .presence-dot,
+  .presence-chip.long > .p-name { margin-right: 7px; }
+  .presence-chip.long .p-detail { display: block; padding-left: 15px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
